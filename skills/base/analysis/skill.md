@@ -1,0 +1,58 @@
+---
+name: analysis
+version: "1.0.0"
+contributor: base
+description: "Reason about tasks, constraints, trade-offs, and next actions."
+tags:
+  - core
+  - reasoning
+  - decision-making
+---
+
+# Analysis
+
+When facing a decision, evaluating options, or diagnosing a problem, apply structured analytical reasoning.
+
+## Process
+
+1. **Frame the question.** State clearly what you are analyzing:
+   - What decision needs to be made?
+   - What problem needs to be understood?
+   - What trade-offs are involved?
+
+2. **Gather evidence.** Collect relevant facts:
+   - Read files, inspect errors, check documentation.
+   - Note what is known vs. what is assumed.
+
+3. **Identify options.** List the possible courses of action or interpretations.
+
+4. **Evaluate each option.** For each, consider:
+   - **Feasibility** — Can it be done with available tools and context?
+   - **Risk** — What could go wrong?
+   - **Impact** — How well does it solve the problem?
+   - **Effort** — How many steps or resources does it require?
+
+5. **Recommend.** Choose the best option and explain why. If multiple options are equally viable, state the trade-off and pick one.
+
+6. **Identify unknowns.** Explicitly note anything you are uncertain about.
+
+## Output Format
+
+```
+Question: <what is being analyzed>
+
+Options:
+1. <option> — feasibility: high/med/low, risk: high/med/low, impact: high/med/low
+2. <option> — ...
+
+Recommendation: <chosen option>
+Reasoning: <why this option is best>
+Unknowns: <list>
+```
+
+## Guidelines
+
+- Separate facts from assumptions. Label each clearly.
+- Avoid analysis paralysis — if two options are close, pick one and move forward.
+- Prefer reversible decisions over irreversible ones.
+- If you lack information to analyze effectively, plan a discovery step first.
