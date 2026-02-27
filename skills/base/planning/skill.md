@@ -1,12 +1,48 @@
 ---
 name: planning
-version: "1.0.0"
+version: "1.1.0"
 contributor: base
 description: "Break tasks into steps and define an actionable plan."
 tags:
   - core
   - reasoning
   - task-management
+
+inputs:
+  - name: goal
+    type: string
+    required: true
+    description: "The user's objective or task to decompose."
+  - name: constraints
+    type: array
+    items:
+      type: string
+    required: false
+    description: "Optional list of known constraints or requirements."
+  - name: availableTools
+    type: array
+    items:
+      type: string
+    required: false
+    description: "Optional list of tool names available to the agent."
+
+outputs:
+  goal: string
+  plan:
+    type: array
+    items:
+      type: object
+      properties:
+        step: { type: number }
+        description: { type: string }
+        tool: { type: string }
+  risks:
+    type: array
+    items:
+      type: string
+    nullable: true
+
+verify: []
 ---
 
 # Planning

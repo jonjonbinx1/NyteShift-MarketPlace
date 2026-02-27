@@ -1,12 +1,51 @@
 ---
 name: analysis
-version: "1.0.0"
+version: "1.1.0"
 contributor: base
 description: "Reason about tasks, constraints, trade-offs, and next actions."
 tags:
   - core
   - reasoning
   - decision-making
+
+inputs:
+  - name: question
+    type: string
+    required: true
+    description: "The decision or problem to analyze."
+  - name: evidence
+    type: array
+    required: false
+    items:
+      type: string
+    description: "Known facts or observations relevant to the question."
+  - name: options
+    type: array
+    required: false
+    items:
+      type: string
+    description: "Candidate options or courses of action to evaluate."
+
+outputs:
+  question: string
+  options:
+    type: array
+    items:
+      type: object
+      properties:
+        option: { type: string }
+        feasibility: { type: string, enum: [high, medium, low] }
+        risk: { type: string, enum: [high, medium, low] }
+        impact: { type: string, enum: [high, medium, low] }
+  recommendation: string
+  reasoning: string
+  unknowns:
+    type: array
+    items:
+      type: string
+    nullable: true
+
+verify: []
 ---
 
 # Analysis

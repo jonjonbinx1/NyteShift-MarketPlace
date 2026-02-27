@@ -94,10 +94,155 @@ Items are resolved by `<contributor>/<name>` pairs. Version conflicts are resolv
 All items use [Semantic Versioning](https://semver.org/):
 
 - **MAJOR** — breaking changes to the item's interface or behavior
-- **MINOR** — new capabilities, backward-compatible
+- **MINOR** — new capabilities, backward-compatible (e.g. adding schema metadata)
 - **PATCH** — bug fixes and minor improvements
 
 The version field lives inside each item's metadata (frontmatter or export object). There is no central version file.
+
+### Schema change rules
+
+| Change type | Version bump | Notes |
+|---|---|---|
+| Add optional input field | MINOR | Backward-compatible |
+| Add required input field | MAJOR | Breaks callers that omit it |
+| Remove input field | MAJOR | Breaks callers that supply it |
+| Change output field type | MAJOR | Breaks callers that read it |
+| Add output field | MINOR | Additive; old callers ignore it |
+| Add `verify` hint | MINOR | Additive |
+
+When making a MAJOR schema change, document the incompatibility in the PR description so runtime consumers (e.g. SolixAI core) can mirror the change.
+
+### Backward compatibility
+
+The SolixAI runtime loads items that lack `inputs`/`outputs`/`spec` with a **deprecation warning**.  
+Schema presence will be **enforced** in a future major release. Contributors are encouraged to annotate all items now.
+
+---
+
+## Interface Schemas
+
+As of **v1.1.0**, every marketplace item must ship explicit interface metadata so that any SolixAI runtime can validate and verify calls without executing the item.
+
+> **This repository supplies the metadata. The runtime consumes it.**  
+> No validation logic lives here.
+
+### Skill schemas
+
+Add `inputs`, `outputs`, and optionally `verify` to every skill's YAML frontmatter.
+
+| Field | Required | Description |
+|---|---|---|
+| `inputs` | Yes | List of input parameter descriptors |
+| `outputs` | Yes | Map of output field names to types |
+| `verify` | No | Tool calls the runtime may issue post-execution (e.g. `filesystem.stat`) |
+
+**Fully annotated example** ([skills/base/editing/skill.md](skills/base/editing/skill.md)):
+
+```yaml
+---
+name: editing
+version: "1.1.0"
+contributor: base
+description: "Describe and execute file modifications using the editor tool."
+tags: [core, coding, file-management]
+
+inputs:
+  - name: filePath
+    type: string
+    required: true
+    description: "Path to the file to modify."
+  - name: change
+    type: object
+    required: true
+    description: "Describes the edit to apply."
+    properties:
+      action:
+        type: string
+        enum: [replace, replace-all, insert-at-line, delete-lines]
+      search:
+        type: string
+      replacement:
+        type: string
+      line:
+        type: number
+      content:
+        type: string
+      startLine:
+        type: number
+      endLine:
+        type: number
+
+outputs:
+  ok: boolean
+  path:
+    type: string
+    nullable: true
+  error:
+    type: string
+    nullable: true
+
+verify:
+  - filesystem.stat
+  - filesystem.read
+---
+```
+
+### Tool schemas
+
+Export a named `spec` object from every tool module alongside the default export.
+
+| Field | Required | Description |
+|---|---|---|
+| `name` | Yes | Must match the default export `name` |
+| `version` | Yes | Must match the default export `version` |
+| `inputSchema` | Yes | JSON Schema draft-07 object describing the `input` argument |
+| `outputSchema` | Yes | JSON Schema draft-07 object describing the return value |
+| `sideEffects` | No | `true` if the tool modifies external state (files, network, processes) |
+| `verify` | No | Post-execution tool hints (e.g. `["filesystem.stat"]`) |
+
+**Fully annotated example** ([tools/base/editor/tool.js](tools/base/editor/tool.js)):
+
+```js
+export const spec = {
+  name: "editor",
+  version: "1.1.0",
+  inputSchema: {
+    type: "object",
+    required: ["action", "path"],
+    properties: {
+      action: {
+        type: "string",
+        enum: ["replace", "replace-all", "insert-at-line", "delete-lines"],
+      },
+      path: { type: "string" },
+      search: { type: "string" },
+      replacement: { type: "string" },
+      line: { type: "number", minimum: 1 },
+      content: { type: "string" },
+      startLine: { type: "number", minimum: 1 },
+      endLine: { type: "number", minimum: 1 },
+    },
+  },
+  outputSchema: {
+    type: "object",
+    required: ["ok"],
+    properties: {
+      ok: { type: "boolean" },
+      path: { type: "string" },
+      insertedAt: { type: "number" },
+      deletedRange: { type: "array", items: { type: "number" } },
+      error: { type: "string" },
+    },
+  },
+  sideEffects: true,
+  verify: ["filesystem.read", "filesystem.stat"],
+};
+```
+
+### Schema-driven version bumps
+
+When you add or modify schema metadata without changing the item's behavior, bump the **MINOR** version.  
+See the [Versioning](#versioning) section for the full compatibility matrix.
 
 ---
 
@@ -138,6 +283,31 @@ version: string
 contributor: string
 description: string
 tags: string[]     # optional
+
+# Schema metadata (required as of v1.1.0)
+inputs:
+  - name: string
+    type: string | number | boolean | object | array
+    required: true | false
+    description: string
+    # for type=string with allowed values:
+    enum: [value1, value2]
+    # for type=object:
+    properties:
+      field: { type: string }
+    # for type=array:
+    items:
+      type: string
+
+outputs:
+  fieldName: type
+  # or
+  fieldName:
+    type: string
+    nullable: true
+
+verify:              # optional: tool calls the runtime may run post-execution
+  - tool.action
 ---
 # Free-form Markdown prompt content
 ```
@@ -159,6 +329,34 @@ export default {
     // implementation
   }
 }
+
+/**
+ * Interface contract — consumed by the SolixAI runtime for call validation.
+ * Schema format: JSON Schema draft-07.
+ * Required as of v1.1.0.
+ */
+export const spec = {
+  name: "string",
+  version: "string",
+  inputSchema: {
+    type: "object",
+    required: ["requiredField"],
+    properties: {
+      requiredField: { type: "string", description: "..." },
+      optionalField: { type: "number", default: 10 },
+    },
+  },
+  outputSchema: {
+    type: "object",
+    required: ["ok"],
+    properties: {
+      ok: { type: "boolean" },
+      error: { type: "string", description: "Present when ok=false." },
+    },
+  },
+  sideEffects: true,   // optional boolean
+  verify: ["tool.action"],  // optional post-execution hints
+};
 ```
 
 Optional: `package.json` for dependencies.

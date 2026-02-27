@@ -62,7 +62,7 @@ const yamlStringify = (obj, indent = 0) => {
 
 export default {
   name: "json-yaml",
-  version: "1.0.0",
+  version: "1.1.0",
   contributor: "base",
   description: "Parse, modify, and write JSON and YAML data.",
 
@@ -131,4 +131,63 @@ export default {
         };
     }
   },
+};
+
+/**
+ * Interface contract — consumed by the SolixAI runtime for call validation.
+ * Schema format: JSON Schema draft-07.
+ * @since 1.1.0
+ */
+export const spec = {
+  name: "json-yaml",
+  version: "1.1.0",
+  inputSchema: {
+    type: "object",
+    required: ["action"],
+    properties: {
+      action: {
+        type: "string",
+        enum: [
+          "json-parse",
+          "json-stringify",
+          "json-read",
+          "json-write",
+          "yaml-parse",
+          "yaml-stringify",
+          "yaml-read",
+          "yaml-write",
+        ],
+        description: "Operation to perform.",
+      },
+      text: {
+        type: "string",
+        description: "Raw JSON or YAML text to parse. Required for action=json-parse and action=yaml-parse.",
+      },
+      data: {
+        description: "Data to serialize. Required for action=json-stringify, json-write, yaml-stringify, yaml-write.",
+      },
+      path: {
+        type: "string",
+        description: "File path to read from or write to. Required for action=*-read and action=*-write.",
+      },
+      indent: {
+        type: "number",
+        description: "JSON indentation spaces. Applies to action=json-stringify and action=json-write. Defaults to 2.",
+        default: 2,
+      },
+    },
+  },
+  outputSchema: {
+    type: "object",
+    required: ["ok"],
+    properties: {
+      ok: { type: "boolean" },
+      data: { description: "Parsed data object. Returned for action=*-parse and action=*-read." },
+      text: { type: "string", description: "Serialized string. Returned for action=*-stringify." },
+      path: { type: "string", description: "Written file path. Returned for action=*-write." },
+      error: { type: "string", description: "Present when ok=false." },
+    },
+  },
+  sideEffects: false,
+  verify: [],
 };

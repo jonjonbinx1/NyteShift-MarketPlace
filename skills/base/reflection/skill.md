@@ -1,12 +1,44 @@
 ---
 name: reflection
-version: "1.0.0"
+version: "1.1.0"
 contributor: base
 description: "Evaluate whether the last step succeeded and decide what to do next."
 tags:
   - core
   - reasoning
   - self-evaluation
+
+inputs:
+  - name: lastStep
+    type: string
+    required: true
+    description: "Description of the step that was just executed."
+  - name: toolResult
+    type: object
+    required: true
+    description: "The raw output returned by the tool or action."
+    properties:
+      ok: { type: boolean }
+      error: { type: string, nullable: true }
+  - name: currentPlan
+    type: array
+    required: false
+    description: "The remaining planned steps, if available."
+    items:
+      type: object
+
+outputs:
+  lastStep: string
+  result:
+    type: string
+    enum: [success, partial, failure]
+  observation: string
+  nextAction: string
+  planChange:
+    type: string
+    nullable: true
+
+verify: []
 ---
 
 # Reflection

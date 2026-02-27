@@ -1,12 +1,51 @@
 ---
 name: research
-version: "1.0.0"
+version: "1.1.0"
 contributor: base
 description: "Search, gather, and synthesize information from multiple sources."
 tags:
   - core
   - reasoning
   - information-gathering
+
+inputs:
+  - name: question
+    type: string
+    required: true
+    description: "The specific question or information need to research."
+  - name: sources
+    type: array
+    required: false
+    items:
+      type: string
+      enum: [local, web, http, project-inspector]
+    description: "Source types to consult. Defaults to all available."
+  - name: maxQueries
+    type: number
+    required: false
+    description: "Maximum number of web search queries to issue. Defaults to 3."
+    default: 3
+
+outputs:
+  question: string
+  sourceResults:
+    type: array
+    items:
+      type: object
+      properties:
+        source: { type: string }
+        finding: { type: string }
+  synthesis: string
+  confidence:
+    type: string
+    enum: [high, medium, low]
+  gaps:
+    type: array
+    items:
+      type: string
+    nullable: true
+
+verify: []
 ---
 
 # Research

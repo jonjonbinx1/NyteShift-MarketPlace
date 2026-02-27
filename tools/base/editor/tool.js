@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 
 export default {
   name: "editor",
-  version: "1.0.0",
+  version: "1.1.0",
   contributor: "base",
   description:
     "Apply patches and diffs to files safely using search-and-replace or line-range operations.",
@@ -69,4 +69,72 @@ export default {
         };
     }
   },
+};
+
+/**
+ * Interface contract — consumed by the SolixAI runtime for call validation.
+ * Schema format: JSON Schema draft-07.
+ * @since 1.1.0
+ */
+export const spec = {
+  name: "editor",
+  version: "1.1.0",
+  inputSchema: {
+    type: "object",
+    required: ["action", "path"],
+    properties: {
+      action: {
+        type: "string",
+        enum: ["replace", "replace-all", "insert-at-line", "delete-lines"],
+        description: "Edit operation to perform.",
+      },
+      path: { type: "string", description: "Path to the file to edit." },
+      search: {
+        type: "string",
+        description: "String to search for. Required for action=replace and action=replace-all.",
+      },
+      replacement: {
+        type: "string",
+        description: "Replacement string. Required for action=replace and action=replace-all.",
+      },
+      line: {
+        type: "number",
+        description: "1-based line number for insertion. Required for action=insert-at-line.",
+        minimum: 1,
+      },
+      content: {
+        type: "string",
+        description: "Content to insert. Required for action=insert-at-line.",
+      },
+      startLine: {
+        type: "number",
+        description: "1-based start line of range to delete. Required for action=delete-lines.",
+        minimum: 1,
+      },
+      endLine: {
+        type: "number",
+        description: "1-based end line of range to delete (inclusive). Required for action=delete-lines.",
+        minimum: 1,
+      },
+    },
+  },
+  outputSchema: {
+    type: "object",
+    required: ["ok"],
+    properties: {
+      ok: { type: "boolean" },
+      path: { type: "string", description: "Resolved path of the edited file." },
+      insertedAt: { type: "number", description: "Line number where content was inserted. Returned for action=insert-at-line." },
+      deletedRange: {
+        type: "array",
+        description: "[startLine, endLine] that was deleted. Returned for action=delete-lines.",
+        items: { type: "number" },
+        minItems: 2,
+        maxItems: 2,
+      },
+      error: { type: "string", description: "Present when ok=false." },
+    },
+  },
+  sideEffects: true,
+  verify: ["filesystem.read", "filesystem.stat"],
 };

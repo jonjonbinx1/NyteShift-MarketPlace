@@ -1,12 +1,42 @@
 ---
 name: execution
-version: "1.0.0"
+version: "1.1.0"
 contributor: base
 description: "Choose tools and run them effectively to accomplish tasks."
 tags:
   - core
   - orchestration
   - tool-use
+
+inputs:
+  - name: planStep
+    type: string
+    required: true
+    description: "The current plan step to execute."
+  - name: availableTools
+    type: array
+    required: false
+    items:
+      type: string
+    description: "Names of tools available to the agent."
+  - name: previousResult
+    type: object
+    required: false
+    description: "Output from the previous tool invocation, for context chaining."
+
+outputs:
+  tool: string
+  input:
+    type: object
+    description: "The exact input object passed to the tool."
+  result:
+    type: object
+    description: "The raw output returned by the tool."
+    properties:
+      ok: { type: boolean }
+      error: { type: string, nullable: true }
+
+verify: []
 ---
 
 # Execution
