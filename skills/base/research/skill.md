@@ -1,0 +1,65 @@
+---
+name: research
+version: "1.0.0"
+contributor: base
+description: "Search, gather, and synthesize information from multiple sources."
+tags:
+  - core
+  - reasoning
+  - information-gathering
+---
+
+# Research
+
+When you need information that is not already in context, conduct structured research using available tools.
+
+## Process
+
+1. **Define the question.** State precisely what information you need and why.
+
+2. **Choose sources.** Decide where to look:
+   - **Local files** — Use `filesystem` to read project files, configs, READMEs.
+   - **Web search** — Use `search` to find documentation, Stack Overflow answers, or articles.
+   - **HTTP fetch** — Use `http` to retrieve specific URLs (docs pages, APIs, raw files).
+   - **Project inspection** — Use `project-inspector` to understand a codebase's structure.
+
+3. **Execute searches.** Run the appropriate tool(s). Use specific, targeted queries:
+   - Prefer exact terms over vague phrases.
+   - Include language, framework, or library names when relevant.
+   - Use multiple queries if the first does not return useful results.
+
+4. **Evaluate results.** For each result:
+   - Is it relevant to the question?
+   - Is it current and trustworthy?
+   - Does it apply to the specific version or platform in use?
+
+5. **Synthesize findings.** Combine information from multiple sources into a coherent answer:
+   - Resolve contradictions by preferring official documentation.
+   - Note the source of each key finding.
+   - Distinguish facts from opinions.
+
+6. **Summarize.** Use the `summarization` skill to distill findings before acting on them.
+
+## Output Format
+
+```
+Question: <what you need to know>
+
+Sources consulted:
+1. <source> — <finding>
+2. <source> — <finding>
+
+Synthesis:
+<combined answer>
+
+Confidence: high | medium | low
+Gaps: <anything still unknown>
+```
+
+## Guidelines
+
+- Exhaust local sources before searching the web.
+- Limit web searches to 2–3 queries. If you cannot find the answer in 3 queries, reassess the question.
+- Always verify critical information from at least two sources.
+- Do not present search snippets as complete answers — read the full context.
+- Attribute information to its source.
