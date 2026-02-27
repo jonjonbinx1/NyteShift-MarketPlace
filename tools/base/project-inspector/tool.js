@@ -51,7 +51,7 @@ const detectNodeFrameworks = (pkg) => {
 
 export default {
   name: "project-inspector",
-  version: "1.0.0",
+  version: "1.1.0",
   contributor: "base",
   description:
     "Detect frameworks, languages, dependencies, and build systems in a project directory.",
@@ -132,4 +132,63 @@ export default {
 
     return { ok: true, path: dir, ...detected };
   },
+};
+
+/**
+ * Interface contract — consumed by the SolixAI runtime for call validation.
+ * Schema format: JSON Schema draft-07.
+ * @since 1.1.0
+ */
+export const spec = {
+  name: "project-inspector",
+  version: "1.1.0",
+  inputSchema: {
+    type: "object",
+    properties: {
+      path: {
+        type: "string",
+        description: "Directory to inspect. Defaults to the current working directory.",
+      },
+    },
+  },
+  outputSchema: {
+    type: "object",
+    required: ["ok", "path"],
+    properties: {
+      ok: { type: "boolean" },
+      path: { type: "string", description: "Resolved directory that was inspected." },
+      ecosystems: {
+        type: "array",
+        items: { type: "string" },
+        description: "Detected package ecosystems (e.g. node, python, go, rust).",
+      },
+      languages: {
+        type: "array",
+        items: { type: "string" },
+        description: "Programming languages detected from file extensions and config files.",
+      },
+      frameworks: {
+        type: "array",
+        items: { type: "string" },
+        description: "Detected frameworks (e.g. react, nextjs, express).",
+      },
+      features: {
+        type: "array",
+        items: { type: "string" },
+        description: "Detected tooling features (e.g. docker, github-actions).",
+      },
+      buildSystems: {
+        type: "array",
+        items: { type: "string" },
+        description: "Detected build systems (e.g. maven, gradle).",
+      },
+      dependencies: {
+        type: "object",
+        description: "Per-ecosystem dependency lists keyed by ecosystem name.",
+      },
+      error: { type: "string", description: "Present when ok=false." },
+    },
+  },
+  sideEffects: false,
+  verify: [],
 };

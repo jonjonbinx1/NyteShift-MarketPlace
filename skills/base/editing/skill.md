@@ -1,12 +1,57 @@
 ---
 name: editing
-version: "1.0.0"
+version: "1.1.0"
 contributor: base
 description: "Describe and execute file modifications using the editor tool."
 tags:
   - core
   - coding
   - file-management
+
+inputs:
+  - name: filePath
+    type: string
+    required: true
+    description: "Path to the file to modify."
+  - name: change
+    type: object
+    required: true
+    description: "Describes the edit to apply."
+    properties:
+      action:
+        type: string
+        enum: [replace, replace-all, insert-at-line, delete-lines]
+      search:
+        type: string
+        description: "String to search for. Required for replace and replace-all."
+      replacement:
+        type: string
+        description: "Replacement text. Required for replace and replace-all."
+      line:
+        type: number
+        description: "1-based line number. Required for insert-at-line."
+      content:
+        type: string
+        description: "Content to insert. Required for insert-at-line."
+      startLine:
+        type: number
+        description: "Start of deletion range. Required for delete-lines."
+      endLine:
+        type: number
+        description: "End of deletion range (inclusive). Required for delete-lines."
+
+outputs:
+  ok: boolean
+  path:
+    type: string
+    nullable: true
+  error:
+    type: string
+    nullable: true
+
+verify:
+  - filesystem.stat
+  - filesystem.read
 ---
 
 # Editing

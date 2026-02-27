@@ -1,12 +1,41 @@
 ---
 name: summarization
-version: "1.0.0"
+version: "1.1.0"
 contributor: base
 description: "Condense long context into concise, accurate summaries."
 tags:
   - core
   - reasoning
   - context-management
+
+inputs:
+  - name: content
+    type: string
+    required: true
+    description: "The text, data, or context to summarize."
+  - name: purpose
+    type: string
+    required: false
+    description: "Why the summary is needed; shapes what is preserved."
+  - name: maxLength
+    type: number
+    required: false
+    description: "Target maximum character or token length for the summary."
+
+outputs:
+  summary:
+    type: array
+    items:
+      type: string
+    description: "Bullet-point list of key findings."
+  openQuestions:
+    type: array
+    items:
+      type: string
+    nullable: true
+    description: "Unresolved items identified during summarization."
+
+verify: []
 ---
 
 # Summarization

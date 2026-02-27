@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 
 export default {
   name: "code-exec",
-  version: "1.0.0",
+  version: "1.1.0",
   contributor: "base",
   description:
     "Run Python or Node.js code snippets in a sandboxed subprocess.",
@@ -62,4 +62,44 @@ export default {
       });
     });
   },
+};
+
+/**
+ * Interface contract — consumed by the SolixAI runtime for call validation.
+ * Schema format: JSON Schema draft-07.
+ * @since 1.1.0
+ */
+export const spec = {
+  name: "code-exec",
+  version: "1.1.0",
+  inputSchema: {
+    type: "object",
+    required: ["language", "code"],
+    properties: {
+      language: {
+        type: "string",
+        enum: ["python", "node", "javascript"],
+        description: "Runtime to use for execution.",
+      },
+      code: { type: "string", description: "Source code snippet to execute." },
+      timeout: {
+        type: "number",
+        description: "Execution timeout in milliseconds. Defaults to 30000.",
+        default: 30000,
+      },
+    },
+  },
+  outputSchema: {
+    type: "object",
+    required: ["ok", "exitCode", "stdout", "stderr"],
+    properties: {
+      ok: { type: "boolean" },
+      exitCode: { type: "number" },
+      stdout: { type: "string" },
+      stderr: { type: "string" },
+      error: { type: "string", description: "Present when ok=false." },
+    },
+  },
+  sideEffects: true,
+  verify: [],
 };
