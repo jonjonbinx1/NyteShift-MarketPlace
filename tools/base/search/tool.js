@@ -5,6 +5,49 @@ export default {
   description:
     "Provider-agnostic web search wrapper. Delegates to the configured search provider in context.",
 
+  config: [
+    {
+      key: "apiKey",
+      label: "API Key",
+      type: "secret",
+      required: true,
+      description: "API key for the configured search provider.",
+      placeholder: "sk-…",
+    },
+    {
+      key: "provider",
+      label: "Search Provider",
+      type: "select",
+      options: ["google", "bing", "duckduckgo", "tavily", "serper"],
+      default: "google",
+      description: "Which search backend to use.",
+    },
+    {
+      key: "defaultMaxResults",
+      label: "Default Max Results",
+      type: "number",
+      default: 10,
+      min: 1,
+      max: 100,
+      step: 1,
+      description: "Default maximum number of results to return per query.",
+    },
+    {
+      key: "safeSearch",
+      label: "Safe Search",
+      type: "boolean",
+      default: true,
+      description: "Filter explicit content from search results.",
+    },
+    {
+      key: "regions",
+      label: "Regions",
+      type: "multiselect",
+      options: ["us", "eu", "asia", "global"],
+      description: "Restrict search results to specific geographic regions.",
+    },
+  ],
+
   run: async ({ input, context }) => {
     const { query, maxResults = 10 } = input;
 

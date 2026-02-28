@@ -36,6 +36,35 @@ outputs:
     description: "Unresolved items identified during summarization."
 
 verify: []
+
+config:
+  - key: maxLength
+    label: Max Summary Length
+    type: number
+    default: 2000
+    min: 100
+    max: 10000
+    step: 100
+    description: Target maximum character length for the generated summary.
+  - key: style
+    label: Summary Style
+    type: select
+    options:
+      - bullets
+      - narrative
+      - structured
+    default: bullets
+    description: Presentation style for the summary output.
+  - key: preserveCodeBlocks
+    label: Preserve Code Blocks
+    type: boolean
+    default: true
+    description: Keep code blocks intact in the summary instead of paraphrasing them.
+  - key: includeOpenQuestions
+    label: Include Open Questions
+    type: boolean
+    default: true
+    description: Append a list of unresolved items identified during summarization.
 ---
 
 # Summarization

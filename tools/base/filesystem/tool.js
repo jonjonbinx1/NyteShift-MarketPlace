@@ -8,6 +8,41 @@ export default {
   description:
     "Read, write, and delete files; list and create directories.",
 
+  config: [
+    {
+      key: "defaultEncoding",
+      label: "Default Encoding",
+      type: "select",
+      options: ["utf-8", "ascii", "latin1", "utf-16le"],
+      default: "utf-8",
+      description: "Character encoding used for file read/write operations.",
+    },
+    {
+      key: "followSymlinks",
+      label: "Follow Symlinks",
+      type: "boolean",
+      default: true,
+      description: "Follow symbolic links when reading or listing files.",
+    },
+    {
+      key: "restrictToWorkspace",
+      label: "Restrict to Workspace",
+      type: "boolean",
+      default: true,
+      description: "Only allow file operations within the current workspace directory.",
+    },
+    {
+      key: "maxFileSize",
+      label: "Max File Size (KB)",
+      type: "number",
+      default: 1024,
+      min: 1,
+      max: 102400,
+      step: 256,
+      description: "Maximum file size in KB allowed for read operations.",
+    },
+  ],
+
   run: async ({ input, context }) => {
     const { action } = input;
 

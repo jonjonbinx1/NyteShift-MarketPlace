@@ -7,6 +7,48 @@ export default {
   contributor: "base",
   description: "Perform HTTP GET/POST requests and download files.",
 
+  config: [
+    {
+      key: "defaultTimeout",
+      label: "Request Timeout (ms)",
+      type: "number",
+      default: 30000,
+      min: 1000,
+      max: 300000,
+      step: 1000,
+      description: "Default timeout in milliseconds for HTTP requests.",
+    },
+    {
+      key: "userAgent",
+      label: "User-Agent",
+      type: "string",
+      default: "SolixAI/1.0",
+      placeholder: "SolixAI/1.0",
+      description: "User-Agent header sent with all requests.",
+    },
+    {
+      key: "proxyUrl",
+      label: "Proxy URL",
+      type: "string",
+      placeholder: "http://proxy.example.com:8080",
+      description: "HTTP proxy URL for outgoing requests. Leave empty for direct connections.",
+    },
+    {
+      key: "allowInsecure",
+      label: "Allow Insecure TLS",
+      type: "boolean",
+      default: false,
+      description: "Allow connections to servers with self-signed or invalid TLS certificates.",
+    },
+    {
+      key: "defaultHeaders",
+      label: "Default Headers",
+      type: "textarea",
+      placeholder: "{\"Authorization\": \"Bearer ...\", \"Accept\": \"application/json\"}",
+      description: "JSON object of default headers to include in every request.",
+    },
+  ],
+
   run: async ({ input, context }) => {
     const { action } = input;
 

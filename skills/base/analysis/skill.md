@@ -46,6 +46,39 @@ outputs:
     nullable: true
 
 verify: []
+
+config:
+  - key: depth
+    label: Analysis Depth
+    type: select
+    options:
+      - quick
+      - standard
+      - thorough
+    default: standard
+    description: How deeply to evaluate each option. "thorough" adds effort/risk matrices.
+  - key: outputFormat
+    label: Output Format
+    type: select
+    options:
+      - structured
+      - narrative
+      - bullets
+    default: structured
+    description: Presentation style for the analysis output.
+  - key: includeUnknowns
+    label: Include Unknowns
+    type: boolean
+    default: true
+    description: Explicitly list unknowns and assumptions in the output.
+  - key: maxOptions
+    label: Max Options to Evaluate
+    type: number
+    default: 5
+    min: 2
+    max: 20
+    step: 1
+    description: Maximum number of candidate options to evaluate per analysis.
 ---
 
 # Analysis
