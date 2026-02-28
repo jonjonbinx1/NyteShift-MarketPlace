@@ -56,6 +56,40 @@ export default {
   description:
     "Detect frameworks, languages, dependencies, and build systems in a project directory.",
 
+  config: [
+    {
+      key: "scanDepth",
+      label: "Scan Depth",
+      type: "number",
+      default: 3,
+      min: 1,
+      max: 10,
+      step: 1,
+      description: "Maximum directory depth to scan for framework indicators.",
+    },
+    {
+      key: "ignoreDirs",
+      label: "Ignore Directories",
+      type: "multiselect",
+      options: ["node_modules", ".git", "dist", "build", "vendor", "__pycache__"],
+      description: "Directories to skip during project inspection.",
+    },
+    {
+      key: "extraIndicators",
+      label: "Extra Indicators",
+      type: "textarea",
+      placeholder: "{\"deno.json\": {\"ecosystem\": \"deno\"}}",
+      description: "Additional framework indicator files as a JSON object mapping filename to metadata.",
+    },
+    {
+      key: "detectLanguages",
+      label: "Detect Languages",
+      type: "boolean",
+      default: true,
+      description: "Scan file extensions to detect programming languages used in the project.",
+    },
+  ],
+
   run: async ({ input, context }) => {
     const dir = resolve(input.path || ".");
 

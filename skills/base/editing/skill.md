@@ -52,6 +52,36 @@ outputs:
 verify:
   - filesystem.stat
   - filesystem.read
+
+config:
+  - key: backupBeforeEdit
+    label: Backup Before Edit
+    type: boolean
+    default: false
+    description: Create a .bak copy of the file before applying any edit.
+  - key: confirmBeforeWrite
+    label: Confirm Before Write
+    type: boolean
+    default: false
+    description: Require explicit confirmation before writing changes to disk.
+  - key: maxContextLines
+    label: Context Lines
+    type: number
+    default: 5
+    min: 1
+    max: 50
+    step: 1
+    description: Number of surrounding lines to include when matching search strings.
+  - key: preferredAction
+    label: Preferred Edit Action
+    type: select
+    options:
+      - replace
+      - replace-all
+      - insert-at-line
+      - delete-lines
+    default: replace
+    description: Default edit action when not explicitly specified.
 ---
 
 # Editing

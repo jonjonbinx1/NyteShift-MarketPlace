@@ -7,6 +7,47 @@ export default {
   description:
     "Run shell commands, capture stdout/stderr, and return exit codes.",
 
+  config: [
+    {
+      key: "defaultShell",
+      label: "Default Shell",
+      type: "string",
+      placeholder: "/bin/bash",
+      description: "Shell binary path. Leave empty to use the system default.",
+    },
+    {
+      key: "defaultTimeout",
+      label: "Default Timeout (ms)",
+      type: "number",
+      default: 30000,
+      min: 1000,
+      max: 600000,
+      step: 1000,
+      description: "Default command execution timeout in milliseconds.",
+    },
+    {
+      key: "allowedCommands",
+      label: "Allowed Commands",
+      type: "textarea",
+      placeholder: "ls\ncat\ngit\nnpm",
+      description: "Whitelist of allowed command prefixes, one per line. Leave empty to allow all.",
+    },
+    {
+      key: "confirmDangerous",
+      label: "Confirm Dangerous Commands",
+      type: "boolean",
+      default: true,
+      description: "Require confirmation before running destructive commands (rm, drop, etc.).",
+    },
+    {
+      key: "defaultCwd",
+      label: "Working Directory",
+      type: "string",
+      placeholder: "/home/user/project",
+      description: "Default working directory for shell commands. Leave empty to use agent workspace.",
+    },
+  ],
+
   run: async ({ input, context }) => {
     const { command, cwd, timeout = 30_000 } = input;
 

@@ -37,6 +37,39 @@ outputs:
       error: { type: string, nullable: true }
 
 verify: []
+
+config:
+  - key: retryOnFailure
+    label: Retry on Failure
+    type: boolean
+    default: true
+    description: Automatically retry a failed tool call before reporting an error.
+  - key: maxRetries
+    label: Max Retries
+    type: number
+    default: 2
+    min: 0
+    max: 10
+    step: 1
+    description: Maximum number of retry attempts for a failed tool invocation.
+  - key: parallelExecution
+    label: Parallel Execution
+    type: boolean
+    default: false
+    description: Allow independent tool calls to run in parallel when possible.
+  - key: verboseLogging
+    label: Verbose Logging
+    type: boolean
+    default: false
+    description: Log detailed tool inputs and outputs for debugging.
+  - key: defaultTimeout
+    label: Default Timeout (ms)
+    type: number
+    default: 30000
+    min: 1000
+    max: 300000
+    step: 1000
+    description: Default timeout in milliseconds for tool invocations.
 ---
 
 # Execution

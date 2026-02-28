@@ -66,6 +66,43 @@ export default {
   contributor: "base",
   description: "Parse, modify, and write JSON and YAML data.",
 
+  config: [
+    {
+      key: "jsonIndent",
+      label: "JSON Indent Spaces",
+      type: "number",
+      default: 2,
+      min: 0,
+      max: 8,
+      step: 1,
+      description: "Number of spaces for JSON indentation when stringifying or writing.",
+    },
+    {
+      key: "yamlIndent",
+      label: "YAML Indent Spaces",
+      type: "number",
+      default: 2,
+      min: 0,
+      max: 8,
+      step: 1,
+      description: "Number of spaces for YAML indentation when stringifying or writing.",
+    },
+    {
+      key: "sortKeys",
+      label: "Sort Keys",
+      type: "boolean",
+      default: false,
+      description: "Alphabetically sort object keys when writing JSON or YAML.",
+    },
+    {
+      key: "trailingNewline",
+      label: "Trailing Newline",
+      type: "boolean",
+      default: true,
+      description: "Append a trailing newline when writing files.",
+    },
+  ],
+
   run: async ({ input, context }) => {
     const { action } = input;
 

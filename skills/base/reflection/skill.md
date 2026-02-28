@@ -39,6 +39,31 @@ outputs:
     nullable: true
 
 verify: []
+
+config:
+  - key: reflectAfterEveryStep
+    label: Reflect After Every Step
+    type: boolean
+    default: true
+    description: Pause and reflect after every action, not just on failures.
+  - key: strictMode
+    label: Strict Mode
+    type: boolean
+    default: false
+    description: Treat partial successes as failures and require full retry.
+  - key: autoRevise
+    label: Auto-Revise Plan
+    type: boolean
+    default: true
+    description: Automatically revise the remaining plan when reflection detects issues.
+  - key: maxConsecutiveFailures
+    label: Max Consecutive Failures
+    type: number
+    default: 3
+    min: 1
+    max: 10
+    step: 1
+    description: Number of consecutive failures before escalating or aborting.
 ---
 
 # Reflection

@@ -46,6 +46,51 @@ outputs:
     nullable: true
 
 verify: []
+
+config:
+  - key: maxQueries
+    label: Max Search Queries
+    type: number
+    default: 3
+    min: 1
+    max: 20
+    step: 1
+    description: Maximum number of web search queries to issue per research task.
+  - key: preferredSources
+    label: Preferred Sources
+    type: multiselect
+    options:
+      - local
+      - web
+      - http
+      - project-inspector
+    description: Source types to prioritize during research.
+  - key: confidenceThreshold
+    label: Min Confidence
+    type: select
+    options:
+      - high
+      - medium
+      - low
+    default: medium
+    description: Minimum confidence level required before accepting a finding.
+  - key: searchProvider
+    label: Search Provider
+    type: select
+    options:
+      - google
+      - bing
+      - duckduckgo
+      - tavily
+      - serper
+    default: google
+    description: Which search backend to use for web queries.
+  - key: searchApiKey
+    label: Search API Key
+    type: secret
+    required: true
+    description: API key for the configured search provider.
+    placeholder: "sk-…"
 ---
 
 # Research

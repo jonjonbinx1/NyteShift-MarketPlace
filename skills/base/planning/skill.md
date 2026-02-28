@@ -43,6 +43,35 @@ outputs:
     nullable: true
 
 verify: []
+
+config:
+  - key: maxSteps
+    label: Max Plan Steps
+    type: number
+    default: 15
+    min: 1
+    max: 50
+    step: 1
+    description: Maximum number of steps allowed in a generated plan.
+  - key: includeRisks
+    label: Include Risks
+    type: boolean
+    default: true
+    description: Include risk assessment and fallback strategies in the plan.
+  - key: planStyle
+    label: Plan Granularity
+    type: select
+    options:
+      - high-level
+      - detailed
+      - granular
+    default: detailed
+    description: Level of detail for each plan step.
+  - key: autoDecompose
+    label: Auto-Decompose
+    type: boolean
+    default: true
+    description: Automatically break large steps into smaller atomic sub-steps.
 ---
 
 # Planning

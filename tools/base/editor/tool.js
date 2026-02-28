@@ -8,6 +8,31 @@ export default {
   description:
     "Apply patches and diffs to files safely using search-and-replace or line-range operations.",
 
+  config: [
+    {
+      key: "createBackup",
+      label: "Create Backup",
+      type: "boolean",
+      default: false,
+      description: "Create a .bak copy of the file before applying edits.",
+    },
+    {
+      key: "trimTrailingWhitespace",
+      label: "Trim Trailing Whitespace",
+      type: "boolean",
+      default: false,
+      description: "Automatically trim trailing whitespace from modified lines.",
+    },
+    {
+      key: "defaultEncoding",
+      label: "File Encoding",
+      type: "select",
+      options: ["utf-8", "ascii", "latin1", "utf-16le"],
+      default: "utf-8",
+      description: "Character encoding used when reading and writing files.",
+    },
+  ],
+
   run: async ({ input, context }) => {
     const { action } = input;
 

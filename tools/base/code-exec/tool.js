@@ -11,6 +11,50 @@ export default {
   description:
     "Run Python or Node.js code snippets in a sandboxed subprocess.",
 
+  config: [
+    {
+      key: "defaultLanguage",
+      label: "Default Language",
+      type: "select",
+      options: ["python", "node", "javascript"],
+      default: "node",
+      description: "Default runtime when language is not explicitly specified.",
+    },
+    {
+      key: "defaultTimeout",
+      label: "Default Timeout (ms)",
+      type: "number",
+      default: 30000,
+      min: 1000,
+      max: 300000,
+      step: 1000,
+      description: "Default execution timeout in milliseconds.",
+    },
+    {
+      key: "sandboxMode",
+      label: "Sandbox Mode",
+      type: "boolean",
+      default: true,
+      description: "Run code in a restricted sandbox with limited filesystem and network access.",
+    },
+    {
+      key: "pythonBinary",
+      label: "Python Binary",
+      type: "string",
+      default: "python3",
+      placeholder: "/usr/bin/python3",
+      description: "Path or command name for the Python interpreter.",
+    },
+    {
+      key: "nodeBinary",
+      label: "Node Binary",
+      type: "string",
+      default: "node",
+      placeholder: "/usr/bin/node",
+      description: "Path or command name for the Node.js runtime.",
+    },
+  ],
+
   run: async ({ input, context }) => {
     const { language, code, timeout = 30_000 } = input;
 
