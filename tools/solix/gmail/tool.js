@@ -20,6 +20,22 @@
 
 const GMAIL_BASE = "https://gmail.googleapis.com/gmail/v1/users/me";
 const TOKEN_URL  = "https://oauth2.googleapis.com/token";
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+/** Read the solix/gmail tool config directly from ~/.solix/config.json. */
+function readSolixToolConfig() {
+  try {
+    const cfgPath = join(homedir(), '.solix', 'config.json');
+    const raw = readFileSync(cfgPath, 'utf-8');
+    const parsed = JSON.parse(raw);
+    return parsed?.toolConfig?.['solix/gmail'] ?? {};
+  } catch (e) {
+    console.warn('[gmail] could not read ~/.solix/config.json:', e.message);
+    return {};
+  }
+}
 
 /** Exchange a refresh token for a fresh access token. */
 async function getAccessToken({ clientId, clientSecret, refreshToken }) {
@@ -593,23 +609,23 @@ import { spawnSync } from 'node:child_process';
       throw new Error(`unknown config action "${key}"`);
     }
 
-    // Try every shape the runtime might use to pass config values.
-    // shape A: context.config.clientId  (same as run())
-    // shape B: context.clientId         (flat on context)
-    // shape C: context.settings.clientId
-    // shape D: context.toolConfig.clientId
+    // Try every shape the runtime might use to pass config values, then fall
+    // back to reading ~/.solix/config.json directly so credentials are always found.
     const cfgA = context?.config ?? {};
     const cfgB = context ?? {};
     const cfgC = context?.settings ?? {};
     const cfgD = context?.toolConfig ?? {};
+    const cfgFile = readSolixToolConfig();
+    console.log('[gmail:configAction] cfgFile keys:', Object.keys(cfgFile));
+
     const clientId =
-      cfgA.clientId ?? cfgB.clientId ?? cfgC.clientId ?? cfgD.clientId ?? null;
+      cfgA.clientId ?? cfgB.clientId ?? cfgC.clientId ?? cfgD.clientId ?? cfgFile.clientId ?? null;
     const clientSecret =
-      cfgA.clientSecret ?? cfgB.clientSecret ?? cfgC.clientSecret ?? cfgD.clientSecret ?? null;
+      cfgA.clientSecret ?? cfgB.clientSecret ?? cfgC.clientSecret ?? cfgD.clientSecret ?? cfgFile.clientSecret ?? null;
     const port =
-      cfgA.oauthCallbackPort ?? cfgB.oauthCallbackPort ?? 3000;
+      cfgA.oauthCallbackPort ?? cfgB.oauthCallbackPort ?? cfgFile.oauthCallbackPort ?? 3000;
     const scopes =
-      cfgA.scopes ?? cfgB.scopes ??
+      cfgA.scopes ?? cfgB.scopes ?? cfgFile.scopes ??
       'https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send';
 
     console.log('[gmail:configAction] clientId present?', !!clientId, 'clientSecret present?', !!clientSecret);
