@@ -261,7 +261,42 @@ import { spawnSync } from 'node:child_process';
   // ── run ─────────────────────────────────────────────────────────────────────
 
   run: async ({ input, context }) => {
-    const cfg = context?.config ?? {};
+    // The UI often redacts or blanks out secrets when it serializes config for
+    // IPC.  In those cases the property will exist but be an empty string, which
+    // would incorrectly override the real value stored on disk.  To handle that
+    // we read the disk config and then coalesce each credential manually.
+    const uiCfg = context?.config ?? {};
+    const fileCfg = readSolixToolConfig();
+
+    // Helper: return `val` if it's a non‑empty string; otherwise fall back to
+    // `fallback` (which may itself be undefined).
+    const pick = (val, fallback) => {
+      if (typeof val === 'string' && val.trim() !== '') return val;
+      return fallback;
+    };
+
+    const cfg = {
+      // copy everything from file as baseline
+      ...fileCfg,
+      // allowedOperations and others may legitimately be present in uiCfg even
+      // if secrets are redacted; apply them too.
+      ...uiCfg,
+    };
+
+    // but ensure specific credentials never become blank
+    cfg.clientId     = pick(uiCfg.clientId, fileCfg.clientId);
+    cfg.clientSecret = pick(uiCfg.clientSecret, fileCfg.clientSecret);
+    cfg.refreshToken = pick(uiCfg.refreshToken, fileCfg.refreshToken);
+
+    // debug logging helps diagnose config issues in logs (can be removed later)
+    if (!cfg.clientId || !cfg.clientSecret || !cfg.refreshToken) {
+      console.warn('[gmail] merged cfg missing credentials', {
+        clientId:     !!cfg.clientId,
+        clientSecret: !!cfg.clientSecret,
+        refreshToken: !!cfg.refreshToken,
+      });
+    }
+
     const { action } = input;
 
     // Resolve credentials
