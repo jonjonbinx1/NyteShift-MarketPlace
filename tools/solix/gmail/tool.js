@@ -662,19 +662,44 @@ import { spawnSync } from 'node:child_process';
         }
       });
 
-      server.listen(port, () => {
-        const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-        authUrl.searchParams.set('client_id', clientId);
-        authUrl.searchParams.set('redirect_uri', `http://localhost:${port}/oauth2callback`);
-        authUrl.searchParams.set('response_type', 'code');
-        authUrl.searchParams.set('scope', defaultScopes);
-        authUrl.searchParams.set('access_type', 'offline');
-        authUrl.searchParams.set('prompt', 'consent');
+      // Prepare the consent URL up-front so we can return it immediately.
+      const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+      authUrl.searchParams.set('client_id', clientId);
+      authUrl.searchParams.set('redirect_uri', `http://localhost:${port}/oauth2callback`);
+      authUrl.searchParams.set('response_type', 'code');
+      authUrl.searchParams.set('scope', defaultScopes);
+      authUrl.searchParams.set('access_type', 'offline');
+      authUrl.searchParams.set('prompt', 'consent');
+      const urlStr = authUrl.toString();
 
-        // Return the URL immediately so the UI can open it reliably.
-        const urlStr = authUrl.toString();
-        resolve({ ok: true, authUrl: urlStr, message: 'Open this URL in your browser to complete Gmail consent.' });
+      // Try to start the server and resolve promptly. Add handlers so the
+      // promise always settles even if bind fails or times out.
+      let settled = false;
+      const finish = (resObj) => {
+        if (settled) return;
+        settled = true;
+        try { resolve(resObj); } catch (e) { /* ignore */ }
+      };
+
+      server.once('listening', () => {
+        finish({ ok: true, authUrl: urlStr, message: 'Open this URL in your browser to complete Gmail consent.' });
       });
+
+      server.once('error', (err) => {
+        // If we cannot bind the port, return the auth URL so the UI can still
+        // open it; include the error so the user can choose a different port.
+        finish({ ok: false, error: err?.message ?? String(err), authUrl: urlStr, message: 'Failed to bind callback port. Open the URL manually and use the helper script if needed.' });
+      });
+
+      // Safety timeout: if listen neither succeeds nor errors within 5s, return
+      // the URL so the UI can proceed instead of hanging.
+      const timeout = setTimeout(() => {
+        finish({ ok: false, error: 'listen_timeout', authUrl: urlStr, message: 'Timed out while binding callback port; open the URL manually.' });
+      }, 5000);
+
+      // Ensure the server remains running to accept the callback even after
+      // we resolved to the UI. The request handler will call server.close().
+      server.listen(port);
     });
     
     // helper to import inside Promise (top-level await not available everywhere)
