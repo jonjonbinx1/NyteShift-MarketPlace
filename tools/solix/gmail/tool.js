@@ -1,131 +1,135 @@
 /**
  * Gmail Tool — SolixAI Marketplace
  * Contributor : solix
- * Version     : 1.0.0
- *
- * Integrates with the Gmail REST API (v1) using OAuth 2.0 refresh-token flow.
- * The set of operations the agent may perform is controlled by the
- * `allowedOperations` config key so administrators can enforce least-privilege.
- *
- * Required Google OAuth 2.0 scope list (grant only those you enable):
- *   read / search   → https://www.googleapis.com/auth/gmail.readonly
- *   send / reply    → https://www.googleapis.com/auth/gmail.send
- *   create-draft    → https://www.googleapis.com/auth/gmail.compose
- *   move / label    → https://www.googleapis.com/auth/gmail.modify
- *   delete          → https://www.googleapis.com/auth/gmail.modify
- *   create-template → https://www.googleapis.com/auth/gmail.modify
- */
+    // If runtime configuration explicitly enables the in-process callback
+    // server, use the previous behavior. Otherwise avoid starting a server in
+    // the main process to prevent blocking the UI. The UI or operator can
+    // instead open the returned `authUrl` and use the helper script to
+    // exchange the code for a refresh token.
+    const useCallbackServer = !!cfg.useCallbackServer;
+    const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    authUrl.searchParams.set('client_id', clientId);
+    authUrl.searchParams.set('redirect_uri', `http://localhost:${port}/oauth2callback`);
+    authUrl.searchParams.set('response_type', 'code');
+    authUrl.searchParams.set('scope', defaultScopes);
+    authUrl.searchParams.set('access_type', 'offline');
+    authUrl.searchParams.set('prompt', 'consent');
+    const urlStr = authUrl.toString();
 
-// ─── helpers ──────────────────────────────────────────────────────────────────
+    console.log('[gmail] useCallbackServer=', useCallbackServer);
+    if (!useCallbackServer) {
+      console.log('[gmail] not starting in-process callback server; returning authUrl immediately');
+      return { ok: true, authUrl: urlStr, message: 'Open this URL in your browser to complete Gmail consent. Use tools/solix/gmail/get_refresh_token.js to exchange the code for a refresh token if needed.' };
+    }
 
-const GMAIL_BASE = "https://gmail.googleapis.com/gmail/v1/users/me";
-const TOKEN_URL  = "https://oauth2.googleapis.com/token";
-import { spawn } from "node:child_process";
+    console.log('[gmail] useCallbackServer=true — starting legacy in-process server');
+    // FALLBACK: previous behavior (kept for compatibility) — start server.
+    return new Promise((resolve) => {
+      const http = require('node:http');
 
-/** Exchange a refresh token for a fresh access token. */
-async function getAccessToken({ clientId, clientSecret, refreshToken }) {
-  const res = await fetch(TOKEN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id:     clientId,
-      client_secret: clientSecret,
-      refresh_token: refreshToken,
-      grant_type:    "refresh_token",
-    }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(`Token refresh failed: ${data.error_description ?? data.error}`);
-  return data.access_token;
-}
+      const server = http.createServer(async (req, res) => {
+        console.log('[gmail] incoming HTTP request:', req.url);
+        try {
+          const u = new URL(req.url, `http://localhost:${port}`);
+          if (u.pathname !== '/oauth2callback') {
+            res.writeHead(404, { 'Content-Type': 'text/plain' });
+            res.end('Not found');
+            return;
+          }
+          const code = u.searchParams.get('code');
+          const error = u.searchParams.get('error');
+          console.log('[gmail] oauth callback parameters, code?', !!code, 'error?', !!error);
+          if (error) {
+            res.writeHead(400, { 'Content-Type': 'text/plain' });
+            res.end(`Error from provider: ${error}`);
+            server.close();
+            console.error('[gmail] oauth provider error:', error);
+            resolve({ ok: false, error });
+            return;
+          }
+          if (!code) {
+            res.writeHead(400, { 'Content-Type': 'text/plain' });
+            res.end('Missing code in callback.');
+            server.close();
+            console.error('[gmail] missing code in callback');
+            resolve({ ok: false, message: 'Missing code in callback.' });
+            return;
+          }
 
-/** Thin authenticated wrapper around fetch for the Gmail REST API. */
-async function gmailFetch(accessToken, path, { method = "GET", body } = {}) {
-  const url = `${GMAIL_BASE}${path}`;
-  const headers = {
-    Authorization: `Bearer ${accessToken}`,
-    "Content-Type": "application/json",
-  };
-  const res = await fetch(url, {
-    method,
-    headers,
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-  });
-  const payload = await res.json();
-  if (!res.ok) {
-    throw new Error(
-      `Gmail API error ${res.status}: ${payload?.error?.message ?? JSON.stringify(payload)}`
-    );
-  }
-  return payload;
-}
+          res.writeHead(200, { 'Content-Type': 'text/plain' });
+          res.end('Authorization received. You can close this tab.');
 
-/** Encode a raw RFC-2822 message string to base64url (required by Gmail API). */
-function toBase64Url(str) {
-  const b64 = Buffer.from(str).toString("base64");
-  return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
+          // Exchange code for tokens
+          try {
+            console.log('[gmail] exchanging code for tokens');
+            const tokenRes = await fetch(TOKEN_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: new URLSearchParams({
+                client_id: clientId,
+                client_secret: clientSecret ? '***REDACTED***' : '',
+                code,
+                grant_type: 'authorization_code',
+                redirect_uri: `http://localhost:${port}/oauth2callback`,
+              }),
+            });
+            const data = await tokenRes.json();
+            console.log('[gmail] token endpoint responded, status=', tokenRes.status);
+            server.close();
+            if (!tokenRes.ok) {
+              console.error('[gmail] token exchange failed:', data);
+              resolve({ ok: false, error: data });
+              return;
+            }
+            const refreshToken = data.refresh_token ?? null;
+            if (!refreshToken) {
+              console.error('[gmail] no refresh_token in response', data);
+              resolve({ ok: false, message: 'No refresh_token returned. Ensure access_type=offline and prompt=consent were used.', data});
+              return;
+            }
+            console.log('[gmail] obtained refresh token (preview):', refreshToken.slice(0,8) + '…');
+            resolve({ ok: true, message: `Refresh token obtained: ${refreshToken.slice(0,8)}…`, refreshToken });
+          } catch (e) {
+            console.error('[gmail] error exchanging token:', e);
+            server.close();
+            resolve({ ok: false, error: e.message ?? String(e) });
+          }
+        } catch (e) {
+          console.error('[gmail] unexpected error in request handler:', e);
+          server.close();
+          resolve({ ok: false, error: e.message ?? String(e) });
+        }
+      });
 
-/** Build a minimal RFC-2822 MIME message string. */
-function buildMimeMessage({ to, from, subject, body, replyToMessageId, threadId, cc, bcc }) {
-  const lines = [
-    `To: ${to}`,
-    from ? `From: ${from}` : null,
-    cc ? `Cc: ${cc}` : null,
-    bcc ? `Bcc: ${bcc}` : null,
-    `Subject: ${subject}`,
-    replyToMessageId ? `In-Reply-To: ${replyToMessageId}` : null,
-    replyToMessageId ? `References: ${replyToMessageId}` : null,
-    "MIME-Version: 1.0",
-    "Content-Type: text/plain; charset=UTF-8",
-    "",
-    body,
-  ];
-  return lines.filter(Boolean).join("\r\n");
-}
+      let settled = false;
+      const finish = (resObj) => {
+        if (settled) return;
+        settled = true;
+        try { resolve(resObj); } catch (e) { /* ignore */ }
+      };
 
-/** Decode base64url payload parts from a Gmail message. */
-function decodeBase64Url(str) {
-  const base64 = str.replace(/-/g, "+").replace(/_/g, "/");
-  return Buffer.from(base64, "base64").toString("utf-8");
-}
+      server.once('listening', () => {
+        console.log('[gmail] server listening on port', port);
+        finish({ ok: true, authUrl: urlStr, message: 'Open this URL in your browser to complete Gmail consent.' });
+      });
 
-/** Extract a header value from a Gmail message headers array. */
-function header(headers, name) {
-  return headers?.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value ?? "";
-}
+      server.once('error', (err) => {
+        console.error('[gmail] server error while binding port:', err?.message ?? err);
+        finish({ ok: false, error: err?.message ?? String(err), authUrl: urlStr, message: 'Failed to bind callback port. Open the URL manually and use the helper script if needed.' });
+      });
 
-/** Extract the plain-text body from a Gmail message. */
-function extractBody(payload) {
-  if (!payload) return "";
-  if (payload.mimeType === "text/plain" && payload.body?.data) {
-    return decodeBase64Url(payload.body.data);
-  }
-  for (const part of payload.parts ?? []) {
-    const result = extractBody(part);
-    if (result) return result;
-  }
-  return "";
-}
+      const timeout = setTimeout(() => {
+        console.warn('[gmail] listen timed out after 5s');
+        finish({ ok: false, error: 'listen_timeout', authUrl: urlStr, message: 'Timed out while binding callback port; open the URL manually.' });
+      }, 5000);
 
-/** Guard: throw if the requested operation is not in allowedOperations. */
-function assertAllowed(config, operation) {
-  const allowed = config?.allowedOperations ?? [];
-  if (!allowed.includes(operation)) {
-    throw new Error(
-      `Operation "${operation}" is not enabled. ` +
-      `Enable it in the Gmail tool's "Allowed Operations" setting.`
-    );
-  }
-}
-
-// ─── default export ────────────────────────────────────────────────────────────
-
-const toolImpl = {
-  name: "gmail",
-  version: "1.0.0",
-  contributor: "solix",
-  description: "Read, search, send, organise and template Gmail messages via the Gmail REST API.",
+      try {
+        server.listen(port);
+      } catch (e) {
+        console.error('[gmail] synchronous server.listen threw:', e);
+        finish({ ok: false, error: e?.message ?? String(e), authUrl: urlStr, message: 'Failed to start callback server synchronously.' });
+      }
+    });
 
   config: [
     // ── Authentication ──────────────────────────────────────────────────────
@@ -225,6 +229,15 @@ const toolImpl = {
 import { spawnSync } from 'node:child_process';
 // The runtime will execute the tool's configAction when the user confirms.
 `,
+    },
+    {
+      key: "useCallbackServer",
+      label: "Use in-process callback server",
+      type: "boolean",
+      default: false,
+      description:
+        "When true the tool will start a local HTTP server to receive the OAuth callback and complete token exchange automatically. " +
+        "Default is false to avoid blocking UI processes — prefer using the helper script or pasting the code manually.",
     },
     {
       key: "trashOnDelete",
