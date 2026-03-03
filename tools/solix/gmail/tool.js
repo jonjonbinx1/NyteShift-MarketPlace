@@ -657,9 +657,10 @@ import { spawnSync } from 'node:child_process';
       authUrl,
       message:
         `Open this URL in your browser to complete Gmail sign-in:\n\n${authUrl}\n\n` +
-        'After completing sign-in, run the helper to get your refresh token:\n' +
-        `  node "${join(homedir(), '.solix', 'tools', 'solix', 'gmail', 'get_refresh_token.js')}"\n\n` +
-        "Then paste the printed refresh token into the tool config 'OAuth 2.0 Refresh Token' field.",
+        'After signing in, Google will redirect to localhost:3000 and show an error — that is expected.\n' +
+        'Copy the "code=" value from the browser address bar, then run:\n\n' +
+        `  node "${join(homedir(), '.solix', 'tools', 'solix', 'gmail', 'get_refresh_token.js')}" --code "PASTE_CODE_HERE"\n\n` +
+        "The script will print your refresh token. Paste it into the 'OAuth 2.0 Refresh Token' field in the tool config.",
     };
   },
 };
