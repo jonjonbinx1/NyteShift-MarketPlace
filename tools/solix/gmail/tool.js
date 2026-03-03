@@ -20,8 +20,7 @@
 
 const GMAIL_BASE = "https://gmail.googleapis.com/gmail/v1/users/me";
 const TOKEN_URL  = "https://oauth2.googleapis.com/token";
-import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { exec } from "node:child_process";
 
 /** Exchange a refresh token for a fresh access token. */
 async function getAccessToken({ clientId, clientSecret, refreshToken }) {
@@ -578,50 +577,118 @@ import { spawnSync } from 'node:child_process';
     }
   },
   // Called by the runtime when a user confirms a config action button in the UI.
-  async configAction(key) {
+  async configAction(key, context) {
     if (key !== "refreshCredentials") {
       throw new Error(`unknown action ${key}`);
     }
 
-    try {
-      const helperPath = fileURLToPath(new URL("./get_refresh_token.js", import.meta.url));
-      // Run the helper script in a child Node process. It will open the browser and print tokens to stdout.
-      const proc = spawnSync(process.execPath, [helperPath], { stdio: ['inherit', 'pipe', 'pipe'] });
-      if (proc.error) throw proc.error;
-      const out = (proc.stdout || Buffer.from('')).toString();
-      // Try to parse a printed 'Refresh token:' line or a JSON blob with refresh_token
-      let token = null;
-      const m = out.match(/Refresh token:\s*([A-Za-z0-9_\-\/\.]+)/i);
-      if (m) token = m[1].trim();
-      if (!token) {
-        const jsonMatch = out.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          try {
-            const parsed = JSON.parse(jsonMatch[0]);
-            token = parsed.refresh_token ?? parsed.refreshToken ?? null;
-          } catch (e) {
-            // ignore
-          }
-        }
-      }
+    const cfg = context?.config ?? {};
+    const clientId = cfg.clientId;
+    const clientSecret = cfg.clientSecret;
+    const defaultScopes = cfg.scopes ?? "https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send";
+    const port = cfg.oauthCallbackPort ?? 3000;
 
-      if (!token) {
-        return {
-          ok: false,
-          message:
-            "No refresh token found in helper output. Run 'node tools/solix/gmail/get_refresh_token.js' manually and copy the refresh token into the tool config.",
-          output: out,
-        };
-      }
-
-      // Return a short success message. The runtime/ UI should persist the token into the tool settings.
+    if (!clientId || !clientSecret) {
       return {
-        ok: true,
-        message: `Refresh token obtained: ${token.slice(0, 8)}… — copy this value into the tool config 'refreshToken' secret field.`,
-        refreshTokenPreview: token.slice(0, 12) + '…',
+        ok: false,
+        message: "Please set 'clientId' and 'clientSecret' in the Gmail tool configuration before running Re-authenticate.",
       };
-    } catch (err) {
-      return { ok: false, error: err?.message ?? String(err) };
+    }
+
+    // Perform the OAuth flow in-process (non-blocking) so the UI remains responsive.
+    return new Promise((resolve) => {
+      const http = require('node:http');
+
+      const server = http.createServer(async (req, res) => {
+        try {
+          const u = new URL(req.url, `http://localhost:${port}`);
+          if (u.pathname !== '/oauth2callback') {
+            res.writeHead(404, { 'Content-Type': 'text/plain' });
+            res.end('Not found');
+            return;
+          }
+          const code = u.searchParams.get('code');
+          const error = u.searchParams.get('error');
+          if (error) {
+            res.writeHead(400, { 'Content-Type': 'text/plain' });
+            res.end(`Error from provider: ${error}`);
+            server.close();
+            resolve({ ok: false, error });
+            return;
+          }
+          if (!code) {
+            res.writeHead(400, { 'Content-Type': 'text/plain' });
+            res.end('Missing code in callback.');
+            server.close();
+            resolve({ ok: false, message: 'Missing code in callback.' });
+            return;
+          }
+
+          res.writeHead(200, { 'Content-Type': 'text/plain' });
+          res.end('Authorization received. You can close this tab.');
+
+          // Exchange code for tokens
+          try {
+            const tokenRes = await fetch(TOKEN_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: new URLSearchParams({
+                client_id: clientId,
+                client_secret: clientSecret,
+                code,
+                grant_type: 'authorization_code',
+                redirect_uri: `http://localhost:${port}/oauth2callback`,
+              }),
+            });
+            const data = await tokenRes.json();
+            server.close();
+            if (!tokenRes.ok) {
+              resolve({ ok: false, error: data });
+              return;
+            }
+            const refreshToken = data.refresh_token ?? null;
+            if (!refreshToken) {
+              resolve({ ok: false, message: 'No refresh_token returned. Ensure access_type=offline and prompt=consent were used.' , data});
+              return;
+            }
+            resolve({ ok: true, message: `Refresh token obtained: ${refreshToken.slice(0,8)}…`, refreshToken });
+          } catch (e) {
+            server.close();
+            resolve({ ok: false, error: e.message ?? String(e) });
+          }
+        } catch (e) {
+          server.close();
+          resolve({ ok: false, error: e.message ?? String(e) });
+        }
+      });
+
+      server.listen(port, () => {
+        const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+        authUrl.searchParams.set('client_id', clientId);
+        authUrl.searchParams.set('redirect_uri', `http://localhost:${port}/oauth2callback`);
+        authUrl.searchParams.set('response_type', 'code');
+        authUrl.searchParams.set('scope', defaultScopes);
+        authUrl.searchParams.set('access_type', 'offline');
+        authUrl.searchParams.set('prompt', 'consent');
+
+        // Open the user's browser to the consent page
+        const urlStr = authUrl.toString();
+        if (process.platform === 'win32') exec(`start "" "${urlStr}"`);
+        else if (process.platform === 'darwin') exec(`open "${urlStr}"`);
+        else exec(`xdg-open "${urlStr}" || echo "Open this URL in your browser: ${urlStr}"`);
+      });
+    });
+    
+    // helper to import inside Promise (top-level await not available everywhere)
+    function awaitImport(mod) {
+      return new Promise((res, rej) => {
+        try {
+          res(require(mod));
+        } catch (e) {
+          // fallback to dynamic import
+          import(mod).then((m) => res(m)).catch(rej);
+        }
+      });
     }
   },
 };
