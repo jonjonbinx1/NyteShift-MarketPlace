@@ -671,23 +671,9 @@ import { spawnSync } from 'node:child_process';
         authUrl.searchParams.set('access_type', 'offline');
         authUrl.searchParams.set('prompt', 'consent');
 
-        // Open the user's browser to the consent page using a detached spawn
+        // Return the URL immediately so the UI can open it reliably.
         const urlStr = authUrl.toString();
-        try {
-          if (process.platform === 'win32') {
-            const p = spawn('cmd', ['/c', 'start', '', urlStr], { detached: true, stdio: 'ignore' });
-            p.unref();
-          } else if (process.platform === 'darwin') {
-            const p = spawn('open', [urlStr], { detached: true, stdio: 'ignore' });
-            p.unref();
-          } else {
-            const p = spawn('xdg-open', [urlStr], { detached: true, stdio: 'ignore' });
-            p.unref();
-          }
-        } catch (e) {
-          // best-effort; fall back to returning the URL so the UI can open it
-          console.error('Failed to open browser automatically:', e?.message ?? e);
-        }
+        resolve({ ok: true, authUrl: urlStr, message: 'Open this URL in your browser to complete Gmail consent.' });
       });
     });
     
