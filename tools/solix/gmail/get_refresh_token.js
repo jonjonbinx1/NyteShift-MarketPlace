@@ -195,15 +195,14 @@ async function main() {
   function onFirstListen() {
     if (readyEmitted) return;
     readyEmitted = true;
-    const redirect = `http://localhost:${actualPort}/oauth2callback`;
-    // tell the parent not only "READY" but also the URI it should open
-    process.stdout.write(`[gmail:get_refresh_token] READY ${redirect}\n`);
+    // Emit the Google OAuth consent URL instead of the local callback URL
+    process.stdout.write(`[gmail:get_refresh_token] READY ${authUrl.toString()}\n`);
     console.log('\nPlease open the following URL in a browser to authorize:');
-    console.log('\n' + redirect + '\n');
+    console.log('\n' + authUrl.toString() + '\n');
     // Only open here when running standalone (not spawned by tool.js which
     // opens the browser itself after receiving READY).
     if (!noOpen) {
-      try { openBrowser(redirect); } catch (e) {}
+      try { openBrowser(authUrl.toString()); } catch (e) {}
     }
     console.log('If you are on a different machine, copy this URL into a browser there.');
     console.log('After granting access the browser will redirect to the local callback and the terminal will display the refresh token.');
