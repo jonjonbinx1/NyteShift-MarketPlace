@@ -23,6 +23,9 @@ const TOKEN_URL  = "https://oauth2.googleapis.com/token";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { spawn } from "node:child_process";
+// `shell` is imported dynamically inside configAction since this file may
+// also be loaded in non-Electron Node contexts (e.g. during offline linting).
 
 /** Read the solix/gmail tool config directly from ~/.solix/config.json. */
 function readSolixToolConfig() {
@@ -236,9 +239,13 @@ const toolImpl = {
       actionLabel: "Re-authenticate",
       actionConfirmText:
         "This will open a browser window to complete OAuth and return a refresh token. Continue?",
-      actionCode: `// Runs the local helper to perform an OAuth consent flow and return a refresh token.
-import { spawnSync } from 'node:child_process';
-// The runtime will execute the tool's configAction when the user confirms.
+      actionCode: `// The actual work is performed by the tool's configAction.  That
+// implementation now opens the consent URL via electron.shell and spawns
+// the helper as an asynchronous detached child process so the main thread
+// is never blocked.  The actionCode stub exists only to signal the runtime
+// to invoke configAction.
+import { spawn } from 'node:child_process';
+import { shell } from 'electron';
 `,
     },
     {
@@ -644,8 +651,7 @@ import { spawnSync } from 'node:child_process';
       throw new Error(`unknown config action "${key}"`);
     }
 
-    // Try every shape the runtime might use to pass config values, then fall
-    // back to reading ~/.solix/config.json directly so credentials are always found.
+    // Gather credentials from any of the known config shapes.
     const cfgA = context?.config ?? {};
     const cfgB = context ?? {};
     const cfgC = context?.settings ?? {};
@@ -673,9 +679,7 @@ import { spawnSync } from 'node:child_process';
       };
     }
 
-    // Build the consent URL synchronously and return it immediately.
-    // Never spawn, never start a server here — doing so blocks the Electron
-    // main-process IPC handler and freezes the renderer.
+    // Build consent URL that the user will need to visit.
     const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
     url.searchParams.set('client_id', clientId);
     url.searchParams.set('redirect_uri', `http://localhost:${port}/oauth2callback`);
@@ -685,18 +689,85 @@ import { spawnSync } from 'node:child_process';
     url.searchParams.set('prompt', 'consent');
     const authUrl = url.toString();
 
-    console.log('[gmail:configAction] returning authUrl immediately (no server started)');
-    console.log('[gmail:configAction] authUrl:', authUrl);
-    return {
-      ok: true,
-      authUrl,
-      message:
-        `Open this URL in your browser to complete Gmail sign-in:\n\n${authUrl}\n\n` +
-        'After signing in, Google will redirect to localhost:3000 and show an error — that is expected.\n' +
-        'Copy the "code=" value from the browser address bar, then run:\n\n' +
-        `  node "${join(homedir(), '.solix', 'tools', 'solix', 'gmail', 'get_refresh_token.js')}" --code "PASTE_CODE_HERE"\n\n` +
-        "The script will print your refresh token. Paste it into the 'OAuth 2.0 Refresh Token' field in the tool config.",
-    };
+    // decide whether we have Electron available so we can attempt to open
+    // the URL automatically.  We do *not* actually open it until after
+    // returning to avoid blocking the renderer.
+    let canOpen = false;
+    try {
+      // eslint-disable-next-line global-require, import/no-extraneous-dependencies
+      const sh = require('electron').shell;
+      if (sh && typeof sh.openExternal === 'function') {
+        canOpen = true;
+      }
+    } catch (e) {
+      // electron not available
+    }
+
+    // helper to open URL either via electron.shell or a platform command
+    function tryOpenUrl(url) {
+      // attempt electron first
+      try {
+        const sh = require('electron').shell;
+        if (sh && typeof sh.openExternal === 'function') {
+          sh.openExternal(url);
+          return 'electron';
+        }
+      } catch { /* electron not available */ }
+      // fallback to system-specific command
+      if (process.platform === 'win32') {
+        // on Windows 'start' is a shell builtin; need explicit cmd invocation
+        try {
+          const cp = spawn('cmd', ['/c', 'start', '""', url], { detached: true, stdio: 'ignore' });
+          cp.unref();
+          return 'cmd';
+        } catch (err) {
+          console.warn('[gmail:configAction] fallback start command failed', err);
+          return null;
+        }
+      }
+      const openCmd = process.platform === 'darwin' ? 'open' : 'xdg-open';
+      try {
+        const cp = spawn(openCmd, [url], { detached: true, stdio: 'ignore' });
+        cp.unref();
+        return 'cmd';
+      } catch (err) {
+        console.warn('[gmail:configAction] fallback open command failed', err);
+      }
+      return null;
+    }
+
+    // schedule side effects on next tick so we return immediately
+    console.log('[gmail:configAction] scheduling browser open and helper launch');
+    setImmediate(() => {
+      const opener = tryOpenUrl(authUrl);
+      if (opener === 'electron') {
+        console.log('[gmail:configAction] consent URL opened via electron.shell');
+      } else if (opener === 'cmd') {
+        console.log('[gmail:configAction] consent URL opened via shell command');
+      } else {
+        console.log('[gmail:configAction] please open consent URL manually:', authUrl);
+      }
+
+      const helperPath = join(homedir(), '.solix', 'tools', 'solix', 'gmail', 'get_refresh_token.js');
+      const nodeExe = process.execPath;
+      console.log('[gmail:configAction] launching helper (async)', helperPath);
+      try {
+        const child = spawn(nodeExe, [helperPath], { detached: true, stdio: 'ignore' });
+        child.unref();
+      } catch (e) {
+        console.error('[gmail:configAction] failed to launch helper', e);
+      }
+    });
+
+    const baseMessage = canOpen
+      ? 'Browser should open automatically; helper has been started.'
+      : 'Helper started in background; open the consent URL below if it does not open automatically.';
+
+    // choose opener for return value: electron when available, else command
+    const openedBy = canOpen ? 'electron' : 'cmd';
+    // always include authUrl and helper path for UI visibility
+    const helperPath = join(homedir(), '.solix', 'tools', 'solix', 'gmail', 'get_refresh_token.js');
+    return { ok: true, message: baseMessage, authUrl, openedBy, helperPath };
   },
 };
 
