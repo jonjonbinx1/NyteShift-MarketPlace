@@ -153,6 +153,23 @@ async function main() {
 
   console.log(`\nStarting local callback server on port ${port}...`);
 
+  // Called once the first server successfully binds.
+  // Emits the READY signal so tool.js can open the browser, and also opens
+  // it locally when the script is run standalone (without --no-open).
+  let firstListenFired = false;
+  function onFirstListen() {
+    if (firstListenFired) return;
+    firstListenFired = true;
+    // Signal parent process (tool.js) with the full auth URL so it can open
+    // the browser and display it in the UI.
+    process.stdout.write(`READY ${authUrl.toString()}\n`);
+    if (!noOpen) {
+      console.log(`\nOpening browser for Google authorization...`);
+      console.log(`Auth URL: ${authUrl.toString()}`);
+      openBrowser(authUrl.toString());
+    }
+  }
+
   // Request handler shared across IPv4/IPv6 servers.
   async function handleRequest(req, res) {
     if (!req.url) return;
