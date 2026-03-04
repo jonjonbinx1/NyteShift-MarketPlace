@@ -22,7 +22,11 @@ import readline from 'node:readline';
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 function question(q) {
-  return new Promise((res) => rl.question(q, (a) => res(a.trim())).on?.('close', () => res('')));
+  return new Promise((res) => {
+    rl.question(q, (a) => res(a.trim()));
+    // `rl.question` doesn't return the interface, so attach listener separately
+    rl.on('close', () => res(''));
+  });
 }
 
 // ── Parse CLI args ────────────────────────────────────────────────────────────
