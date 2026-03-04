@@ -20,8 +20,8 @@
 
 const GMAIL_BASE = "https://gmail.googleapis.com/gmail/v1/users/me";
 const TOKEN_URL  = "https://oauth2.googleapis.com/token";
-import { readFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { readFileSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 // `shell` is imported dynamically inside configAction since this file may
@@ -704,20 +704,53 @@ import { shell } from 'electron';
     }
 
     // helper to open URL either via electron.shell or a platform command
-    function tryOpenUrl(url) {
-      // attempt electron first
+    // helper to write a tiny redirect page so browsers receive the URL via
+    // HTML/JS rather than as a command-line argument.  This avoids any shell
+    // quoting corner cases that might strip query parameters.
+    function writeRedirectPage(targetUrl) {
+      const fname = join(tmpdir(), `gmail_oauth_${Date.now()}.html`);
+      const html = `<!doctype html><meta charset="utf-8"><script>` +
+        `window.location.href=${JSON.stringify(targetUrl)};` +
+        `</script>`;
+      try {
+        writeFileSync(fname, html, 'utf8');
+        return fname;
+      } catch (e) {
+        console.warn('[gmail:configAction] redirect page write failed', e);
+        return null;
+      }
+    }
+
+    async function tryOpenUrl(url) {
+      // attempt to use a redirect page first
+      const redirect = writeRedirectPage(url);
+      const toOpen = redirect || url;
+
+      // try the open npm package first; it handles quoting on all platforms
+      try {
+        const openPkg = await import('open');
+        await openPkg.default(toOpen);
+        return 'open';
+      } catch (e) {
+        // ignore and fall back
+      }
+
+      // attempt electron next
       try {
         const sh = require('electron').shell;
         if (sh && typeof sh.openExternal === 'function') {
-          sh.openExternal(url);
+          sh.openExternal(toOpen);
           return 'electron';
         }
       } catch { /* electron not available */ }
+
       // fallback to system-specific command
       if (process.platform === 'win32') {
         // on Windows 'start' is a shell builtin; need explicit cmd invocation
+        const quoted = `"${toOpen.replace(/"/g, '\\"')}"`;
+        console.log('[gmail:configAction] spawning cmd start with', quoted);
         try {
-          const cp = spawn('cmd', ['/c', 'start', '""', url], { detached: true, stdio: 'ignore' });
+          const cp = spawn('cmd', ['/c', 'start', '""', quoted], { detached: true, stdio: 'ignore' });
           cp.unref();
           return 'cmd';
         } catch (err) {
@@ -727,7 +760,7 @@ import { shell } from 'electron';
       }
       const openCmd = process.platform === 'darwin' ? 'open' : 'xdg-open';
       try {
-        const cp = spawn(openCmd, [url], { detached: true, stdio: 'ignore' });
+        const cp = spawn(openCmd, [toOpen], { detached: true, stdio: 'ignore' });
         cp.unref();
         return 'cmd';
       } catch (err) {
@@ -736,38 +769,47 @@ import { shell } from 'electron';
       return null;
     }
 
-    // schedule side effects on next tick so we return immediately
-    console.log('[gmail:configAction] scheduling browser open and helper launch');
-    setImmediate(() => {
-      const opener = tryOpenUrl(authUrl);
-      if (opener === 'electron') {
-        console.log('[gmail:configAction] consent URL opened via electron.shell');
-      } else if (opener === 'cmd') {
-        console.log('[gmail:configAction] consent URL opened via shell command');
-      } else {
-        console.log('[gmail:configAction] please open consent URL manually:', authUrl);
-      }
+    // perform side effects immediately so browser launch occurs before
+    // the renderer ever sees the response.  This avoids any chance that the
+    // user will need to copy/paste a link (and therefore encounter a
+    // truncated URL).
+    console.log('[gmail:configAction] opening browser and launching helper');
+    let opener = null;
+    try {
+      opener = await tryOpenUrl(authUrl);
+    } catch (err) {
+      console.warn('[gmail:configAction] tryOpenUrl threw', err);
+    }
+    if (opener === 'open') {
+      console.log('[gmail:configAction] consent URL opened via open package');
+    } else if (opener === 'electron') {
+      console.log('[gmail:configAction] consent URL opened via electron.shell');
+    } else if (opener === 'cmd') {
+      console.log('[gmail:configAction] consent URL opened via shell command');
+    } else {
+      console.log('[gmail:configAction] please open consent URL manually:', authUrl);
+    }
 
-      const helperPath = join(homedir(), '.solix', 'tools', 'solix', 'gmail', 'get_refresh_token.js');
-      const nodeExe = process.execPath;
-      console.log('[gmail:configAction] launching helper (async)', helperPath);
-      try {
-        const child = spawn(nodeExe, [helperPath], { detached: true, stdio: 'ignore' });
-        child.unref();
-      } catch (e) {
-        console.error('[gmail:configAction] failed to launch helper', e);
-      }
-    });
+    const helperPath = join(homedir(), '.solix', 'tools', 'solix', 'gmail', 'get_refresh_token.js');
+    const nodeExe = process.execPath;
+    console.log('[gmail:configAction] launching helper', helperPath);
+    try {
+      const child = spawn(nodeExe, [helperPath], { detached: true, stdio: 'ignore' });
+      child.unref();
+    } catch (e) {
+      console.error('[gmail:configAction] failed to launch helper', e);
+    }
 
-    const baseMessage = canOpen
+    const worked = opener !== null;
+    const baseMessage = worked
       ? 'Browser should open automatically; helper has been started.'
       : 'Helper started in background; open the consent URL below if it does not open automatically.';
-
-    // choose opener for return value: electron when available, else command
-    const openedBy = canOpen ? 'electron' : 'cmd';
-    // always include authUrl and helper path for UI visibility
-    const helperPath = join(homedir(), '.solix', 'tools', 'solix', 'gmail', 'get_refresh_token.js');
-    return { ok: true, message: baseMessage, authUrl, openedBy, helperPath };
+    const result = { ok: true, message: baseMessage, openedBy: opener, helperPath };
+    if (!worked) {
+      // only include authUrl when we weren't able to open it ourselves
+      result.authUrl = authUrl;
+    }
+    return result;
   },
 };
 
