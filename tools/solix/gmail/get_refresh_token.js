@@ -100,7 +100,8 @@ async function main() {
   const existingCode = getArg('code');
   const portInput = getArg('port');
   const port = parseInt(portInput ?? '3000', 10);
-  // Use 127.0.0.1 explicitly for redirect_uri and server
+  // Google OAuth does NOT allow 0.0.0.0 as a redirect URI. Use localhost for redirect URI,
+  // but bind the server to 0.0.0.0 to accept connections from all local addresses.
   const redirectUri = `http://localhost:${port}/oauth2callback`;
   let actualPort = port;
   const servers = [];
@@ -235,12 +236,11 @@ async function main() {
   }
 
 
-  // Always bind to both 'localhost' (may resolve to ::1/IPv6) and '127.0.0.1' (IPv4) for maximum compatibility
-  const bindHosts = ['localhost', '127.0.0.1'];
-  for (const host of bindHosts) {
-    console.log(`[gmail:get_refresh_token] attempting to bind on ${host}:${port}...`);
-    makeServer(host);
-  }
+  // Bind only to 0.0.0.0 for maximum compatibility (accepts connections from localhost, 127.0.0.1, ::1, etc.)
+  // The redirect URI must remain http://localhost:3000/oauth2callback for Google OAuth compliance.
+  const bindHost = '0.0.0.0';
+  console.log(`[gmail:get_refresh_token] attempting to bind on ${bindHost}:${port}...`);
+  makeServer(bindHost);
 
   // Prevent exit until callback is received
   process.on('SIGINT', () => {
