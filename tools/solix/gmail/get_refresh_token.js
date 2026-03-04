@@ -17,6 +17,7 @@ import http from 'node:http';
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { exec } from 'node:child_process';
 import readline from 'node:readline';
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -66,6 +67,27 @@ async function exchangeCode({ clientId, clientSecret, code, redirectUri }) {
   console.log('\n✅ Refresh token obtained!');
   console.log('\nRefresh token:', data.refresh_token);
   console.log('\nPaste this value into the Gmail tool config → OAuth 2.0 Refresh Token field.');
+}
+
+// Cross-platform browser launcher. Falls back to printing the URL
+// if the platform command fails.
+function openBrowser(url) {
+  const plat = process.platform;
+  let cmd;
+  if (plat === 'win32') {
+    // `start` must be run through cmd.exe
+    cmd = `cmd /c start "" "${url}"`;
+  } else if (plat === 'darwin') {
+    cmd = `open "${url}"`;
+  } else {
+    cmd = `xdg-open "${url}"`;
+  }
+
+  exec(cmd, (err) => {
+    if (err) {
+      console.warn('Could not open browser automatically – please open the URL manually:\n', url);
+    }
+  });
 }
 
 async function main() {
@@ -143,6 +165,13 @@ async function main() {
     console.log(`Listening on ${redirectUri}`);
     console.log('\nPlease open the following URL in a browser to authorize:');
     console.log('\n' + authUrl.toString() + '\n');
+    // attempt to open the user's browser automatically; if this fails
+    // the helper will have already printed the URL for manual copy/paste.
+    try {
+      openBrowser(authUrl.toString());
+    } catch (e) {
+      // ignore errors here; openBrowser logs a warning on failure
+    }
     console.log('If you are on a different machine, copy this URL into a browser there.');
     console.log('After granting access the browser will redirect to the local callback and the terminal will display the refresh token.');
   });
