@@ -764,7 +764,66 @@ import { shell } from 'electron';
     // the renderer ever sees the response.  This avoids any chance that the
     // user will need to copy/paste a link (and therefore encounter a
     // truncated URL).
-    console.log('[gmail:configAction] opening browser and launching helper');
+    // ── Spawn helper first, wait for READY, then open browser ─────────────
+    // This prevents the race where the browser follows the OAuth redirect
+    // before the local callback server has bound to its port.
+    const helperPath = join(homedir(), '.solix', 'tools', 'solix', 'gmail', 'get_refresh_token.js');
+    const nodeExe = process.execPath;
+    console.log('[gmail:configAction] launching helper', helperPath);
+
+    let helperChild = null;
+    let helperReady = false;
+
+    // Returns a promise that resolves true when helper emits READY,
+    // or false after a 7 s timeout (open browser as fallback anyway).
+    const waitForReady = new Promise((resolve) => {
+      const READY_TIMEOUT_MS = 7000;
+      const timer = setTimeout(() => {
+        console.warn('[gmail:configAction] helper did not emit READY within 7 s; opening browser as fallback');
+        resolve(false);
+      }, READY_TIMEOUT_MS);
+
+      try {
+        helperChild = spawn(nodeExe, [helperPath, '--no-open'], {
+          // pipe stdout/stderr so we can read the READY signal;
+          // do NOT detach yet — we need to keep reading stdout
+          stdio: ['ignore', 'pipe', 'pipe'],
+          windowsHide: true,
+        });
+
+        helperChild.stdout.setEncoding('utf8');
+        helperChild.stdout.on('data', (chunk) => {
+          // Forward helper output so it appears in the host logs.
+          process.stdout.write('[helper] ' + chunk);
+          if (!helperReady && /READY/.test(chunk)) {
+            helperReady = true;
+            clearTimeout(timer);
+            resolve(true);
+          }
+        });
+
+        helperChild.stderr.setEncoding('utf8');
+        helperChild.stderr.on('data', (c) => process.stderr.write('[helper:err] ' + c));
+
+        helperChild.on('error', (err) => {
+          console.error('[gmail:configAction] helper spawn error', err);
+          clearTimeout(timer);
+          resolve(false);
+        });
+      } catch (e) {
+        console.error('[gmail:configAction] failed to launch helper', e);
+        clearTimeout(timer);
+        resolve(false);
+      }
+    });
+
+    // Block (max 7 s) until server is confirmed listening, then open browser.
+    console.log('[gmail:configAction] waiting for helper server to be ready...');
+    const serverReady = await waitForReady;
+    console.log('[gmail:configAction]', serverReady
+      ? 'helper signalled READY — opening browser'
+      : 'timeout elapsed — opening browser as fallback');
+
     let opener = null;
     try {
       opener = await tryOpenUrl(authUrl);
@@ -781,22 +840,12 @@ import { shell } from 'electron';
       console.log('[gmail:configAction] please open consent URL manually:', authUrl);
     }
 
-    const helperPath = join(homedir(), '.solix', 'tools', 'solix', 'gmail', 'get_refresh_token.js');
-    const nodeExe = process.execPath;
-    console.log('[gmail:configAction] launching helper', helperPath);
-    try {
-      const child = spawn(nodeExe, [helperPath], { detached: true, stdio: 'ignore' });
-      child.unref();
-    } catch (e) {
-      console.error('[gmail:configAction] failed to launch helper', e);
-    }
-
     const worked = opener !== null;
     const baseMessage = worked
       ? 'Browser should open automatically; helper has been started. Caller may also open the provided authUrl.'
       : 'Helper started in background; open the consent URL below if it does not open automatically.';
     // always return the authUrl so the front-end can choose to open it itself
-    const result = { ok: true, message: baseMessage, openedBy: opener, helperPath, authUrl };
+    const result = { ok: true, message: baseMessage, openedBy: opener, serverReady, helperPath, authUrl };
     return result;
   },
 };
