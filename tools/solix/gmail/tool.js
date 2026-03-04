@@ -784,7 +784,14 @@ import { shell } from 'electron';
       }, READY_TIMEOUT_MS);
 
       try {
-        helperChild = spawn(nodeExe, [helperPath, '--no-open'], {
+        // pass credentials so the helper skips interactive prompts
+      const helperArgs = [helperPath, '--no-open'];
+      if (clientId) helperArgs.push('--clientId', clientId);
+      if (clientSecret) helperArgs.push('--clientSecret', clientSecret);
+      if (port) helperArgs.push('--port', String(port));
+      if (scopes) helperArgs.push('--scopes', scopes);
+
+      helperChild = spawn(nodeExe, helperArgs, {
           // pipe stdout/stderr so we can read the READY signal;
           // do NOT detach yet — we need to keep reading stdout
           stdio: ['ignore', 'pipe', 'pipe'],
