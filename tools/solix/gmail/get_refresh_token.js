@@ -103,6 +103,7 @@ async function main() {
   // Use 127.0.0.1 explicitly for redirect_uri and server
   const redirectUri = `http://127.0.0.1:${port}/oauth2callback`;
   let actualPort = port;
+  const servers = [];
 
   const scopes = getArg('scopes') ?? solixCfg.scopes ??
     'https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send';
@@ -234,5 +235,4 @@ main().catch((e) => {
   // using either family can reach the callback. Some platforms default to
   // IPv6-only sockets which won't accept IPv4 connections, so attempting
   // both increases reliability.
-  const servers = [];
-  let actualPort = port;
+  const actualPort = port;
