@@ -102,6 +102,7 @@ async function main() {
   const port = parseInt(portInput ?? '3000', 10);
   // Use 127.0.0.1 explicitly for redirect_uri and server
   const redirectUri = `http://127.0.0.1:${port}/oauth2callback`;
+  let actualPort = port;
 
   const scopes = getArg('scopes') ?? solixCfg.scopes ??
     'https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send';
