@@ -802,10 +802,19 @@ import { shell } from 'electron';
         helperChild.stdout.on('data', (chunk) => {
           // Forward helper output so it appears in the host logs.
           process.stdout.write('[helper] ' + chunk);
-          if (!helperReady && /READY/.test(chunk)) {
-            helperReady = true;
-            clearTimeout(timer);
-            resolve(true);
+          if (!helperReady) {
+            const m = chunk.match(/READY\s+(https?:\/\/localhost:(\d+)\/oauth2callback)/);
+            if (m) {
+              helperReady = true;
+              clearTimeout(timer);
+              // update the authUrl we'll open to match the helper's URI
+              authUrl = m[1];
+              resolve(true);
+            } else if (/READY/.test(chunk)) {
+              helperReady = true;
+              clearTimeout(timer);
+              resolve(true);
+            }
           }
         });
 
