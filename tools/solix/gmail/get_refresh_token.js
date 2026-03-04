@@ -101,7 +101,7 @@ async function main() {
   const portInput = getArg('port');
   const port = parseInt(portInput ?? '3000', 10);
   // Use 127.0.0.1 explicitly for redirect_uri and server
-  const redirectUri = `http://127.0.0.1:${port}/oauth2callback`;
+  const redirectUri = `http://localhost:${port}/oauth2callback`;
   let actualPort = port;
   const servers = [];
 
@@ -234,17 +234,16 @@ async function main() {
     return s;
   }
 
-  // Windows often needs 0.0.0.0 to avoid firewall issues with loopback-only bindings
-  const bindHost = process.platform === 'win32' ? '0.0.0.0' : '127.0.0.1';
-  console.log(`[gmail:get_refresh_token] attempting to bind on ${bindHost}...`);
+  // Use localhost for maximum compatibility across platforms and firewalls
+  const bindHost = 'localhost';
+  console.log(`[gmail:get_refresh_token] attempting to bind on ${bindHost}:${port}...`);
   makeServer(bindHost);
 
-  // Fallback: try the other option if first one fails after 500ms
-  const otherHost = bindHost === '0.0.0.0' ? '127.0.0.1' : '0.0.0.0';
+  // Fallback: if localhost fails, try 127.0.0.1 after 500ms
   const fallbackTimer = setTimeout(() => {
     if (servers.length === 0) {
-      console.error(`[gmail:get_refresh_token] ${bindHost} binding failed; trying ${otherHost}...`);
-      makeServer(otherHost);
+      console.error(`[gmail:get_refresh_token] ${bindHost} binding failed; trying 127.0.0.1...`);
+      makeServer('127.0.0.1');
     }
   }, 500);
 
