@@ -174,28 +174,36 @@ async function main() {
 
   // Request handler shared across IPv4/IPv6 servers.
   async function handleRequest(req, res) {
-    if (!req.url) return;
+    if (!req.url) {
+      console.warn('[gmail:get_refresh_token] Received request with no URL');
+      return;
+    }
+    console.log(`[gmail:get_refresh_token] Incoming request: ${req.method} ${req.url}`);
     // Use the literal host we bound to when constructing the URL base so
     // parsing works regardless of whether browser used IPv4 or IPv6.
     const host = req.headers.host || `localhost:${port}`;
     const u = new URL(req.url, `http://${host}`);
     if (u.pathname !== '/oauth2callback') {
+      console.warn(`[gmail:get_refresh_token] 404 Not Found: ${u.pathname}`);
       res.writeHead(404); res.end('Not found'); return;
     }
     const code = u.searchParams.get('code');
     const error = u.searchParams.get('error');
     if (error) {
+      console.error(`[gmail:get_refresh_token] OAuth error: ${error}`);
       res.writeHead(400, { 'Content-Type': 'text/plain' });
       res.end(`OAuth error: ${error}`);
-      console.error('OAuth error:', error);
       // close all servers and exit
       servers.forEach((s) => { try { s.close(); } catch {} });
+      console.log('[gmail:get_refresh_token] Servers closed after OAuth error. Exiting.');
       process.exit(1);
     }
+    console.log('[gmail:get_refresh_token] Received valid /oauth2callback request. Sending 200 response.');
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Authorization received. You can close this tab. Check the terminal for the refresh token.');
     // close all servers and exchange the code
     servers.forEach((s) => { try { s.close(); } catch {} });
+    console.log('[gmail:get_refresh_token] Servers closed after successful callback. Exchanging code for tokens.');
     await exchangeCode({ clientId, clientSecret, code, redirectUri });
     rl.close();
   }
@@ -240,12 +248,17 @@ async function main() {
   // The redirect URI must remain http://localhost:3000/oauth2callback for Google OAuth compliance.
   const bindHost = '0.0.0.0';
   console.log(`[gmail:get_refresh_token] attempting to bind on ${bindHost}:${port}...`);
-  makeServer(bindHost);
+  try {
+    makeServer(bindHost);
+  } catch (e) {
+    console.error(`[gmail:get_refresh_token] Failed to bind server on ${bindHost}:${port}:`, e);
+  }
 
   // Prevent exit until callback is received
   process.on('SIGINT', () => {
     console.log('[gmail:get_refresh_token] Received SIGINT, shutting down servers.');
     servers.forEach((s) => { try { s.close(); } catch {} });
+    console.log('[gmail:get_refresh_token] All servers closed. Exiting.');
     process.exit(0);
   });
 }
