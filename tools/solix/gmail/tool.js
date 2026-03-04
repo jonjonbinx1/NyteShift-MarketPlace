@@ -687,7 +687,7 @@ import { shell } from 'electron';
     url.searchParams.set('scope', scopes);
     url.searchParams.set('access_type', 'offline');
     url.searchParams.set('prompt', 'consent');
-    const authUrl = url.toString();
+    let authUrl = url.toString();
 
     // decide whether we have Electron available so we can attempt to open
     // the URL automatically.  We do *not* actually open it until after
