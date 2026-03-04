@@ -184,20 +184,26 @@ async function main() {
   // both increases reliability.
   const servers = [];
 
+  // track the port we actually bound to (may differ when port 0 is used)
+  let actualPort = port;
+
   // Emitted once — signals parent process (tool.js) that the server is ready
-  // so the parent can open the browser at exactly the right moment.
+  // so the parent can open the browser at exactly the right moment.  Include
+  // the full redirect URI, allowing the parent to adjust if a different port
+  // was selected due to conflicts.
   let readyEmitted = false;
   function onFirstListen() {
     if (readyEmitted) return;
     readyEmitted = true;
-    // Deterministic token read by tool.js stdout watcher.
-    process.stdout.write('[gmail:get_refresh_token] READY\n');
+    const redirect = `http://localhost:${actualPort}/oauth2callback`;
+    // tell the parent not only "READY" but also the URI it should open
+    process.stdout.write(`[gmail:get_refresh_token] READY ${redirect}\n`);
     console.log('\nPlease open the following URL in a browser to authorize:');
-    console.log('\n' + authUrl.toString() + '\n');
+    console.log('\n' + redirect + '\n');
     // Only open here when running standalone (not spawned by tool.js which
     // opens the browser itself after receiving READY).
     if (!noOpen) {
-      try { openBrowser(authUrl.toString()); } catch (e) {}
+      try { openBrowser(redirect); } catch (e) {}
     }
     console.log('If you are on a different machine, copy this URL into a browser there.');
     console.log('After granting access the browser will redirect to the local callback and the terminal will display the refresh token.');
@@ -210,8 +216,7 @@ async function main() {
       console.error(`[gmail:get_refresh_token] Server error on ${host}:`, err && err.code ? err.code : err);
     });
     s.on('listening', () => {
-      const a = s.address();
-      try { console.log(`[gmail:get_refresh_token] listening on ${host}:`, JSON.stringify(a)); }
+      const a = s.address();      actualPort = a?.port || actualPort;      try { console.log(`[gmail:get_refresh_token] listening on ${host}:`, JSON.stringify(a)); }
       catch (e) { console.log(`[gmail:get_refresh_token] listening on ${host}`); }
       servers.push(s);
       onFirstListen();
