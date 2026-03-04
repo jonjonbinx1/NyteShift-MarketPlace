@@ -140,9 +140,13 @@ async function main() {
 
   console.log(`\nStarting local callback server on port ${port}...`);
 
-  const server = http.createServer(async (req, res) => {
+  // Request handler shared across IPv4/IPv6 servers.
+  async function handleRequest(req, res) {
     if (!req.url) return;
-    const u = new URL(req.url, `http://localhost:${port}`);
+    // Use the literal host we bound to when constructing the URL base so
+    // parsing works regardless of whether browser used IPv4 or IPv6.
+    const host = req.headers.host || `localhost:${port}`;
+    const u = new URL(req.url, `http://${host}`);
     if (u.pathname !== '/oauth2callback') {
       res.writeHead(404); res.end('Not found'); return;
     }
@@ -152,42 +156,71 @@ async function main() {
       res.writeHead(400, { 'Content-Type': 'text/plain' });
       res.end(`OAuth error: ${error}`);
       console.error('OAuth error:', error);
-      server.close(); process.exit(1);
+      // close all servers and exit
+      servers.forEach((s) => { try { s.close(); } catch {} });
+      process.exit(1);
     }
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Authorization received. You can close this tab. Check the terminal for the refresh token.');
-    server.close();
+    // close all servers and exchange the code
+    servers.forEach((s) => { try { s.close(); } catch {} });
     await exchangeCode({ clientId, clientSecret, code, redirectUri });
     rl.close();
-  });
+  }
 
-  server.on('error', (err) => {
-    console.error('[gmail:get_refresh_token] Server error:', err);
-    process.exit(1);
-  });
+  // Try to listen on both IPv6 and IPv4 loopback addresses so browsers
+  // using either family can reach the callback. Some platforms default to
+  // IPv6-only sockets which won't accept IPv4 connections, so attempting
+  // both increases reliability.
+  const servers = [];
 
-  // Bind explicitly to the loopback interface to ensure the browser can
-  // reach the local callback endpoint regardless of how `localhost` resolves.
-  server.listen(port, '127.0.0.1', () => {
-    console.log(`Listening on ${redirectUri}`);
-    const addr = server.address();
+  // Helper to create+listen and attach diagnostics
+  function makeServer(host) {
+    const s = http.createServer(handleRequest);
+    s.on('error', (err) => {
+      console.error(`[gmail:get_refresh_token] Server error on ${host}:`, err && err.code ? err.code : err);
+    });
+    s.on('listening', () => {
+      const a = s.address();
+      try { console.log(`[gmail:get_refresh_token] listening on ${host}:`, JSON.stringify(a)); }
+      catch (e) { console.log(`[gmail:get_refresh_token] listening on ${host}`); }
+    });
     try {
-      console.log('[gmail:get_refresh_token] server.address():', JSON.stringify(addr));
+      s.listen(port, host);
+      servers.push(s);
     } catch (e) {
-      console.log('[gmail:get_refresh_token] server listening');
+      console.error(`[gmail:get_refresh_token] listen(${host}) failed:`, e && e.code ? e.code : e);
     }
-    console.log('\nPlease open the following URL in a browser to authorize:');
-    console.log('\n' + authUrl.toString() + '\n');
-    // attempt to open the user's browser automatically; if this fails
-    // the helper will have already printed the URL for manual copy/paste.
-    try {
-      openBrowser(authUrl.toString());
-    } catch (e) {
-      // ignore errors here; openBrowser logs a warning on failure
+  }
+
+  // Attempt IPv6 (::1) then IPv4 (127.0.0.1). If both fail, fall back to
+  // unspecified host (listen on all interfaces) as a last resort.
+  makeServer('::1');
+  makeServer('127.0.0.1');
+
+  setTimeout(() => {
+    if (servers.length === 0) {
+      console.error('[gmail:get_refresh_token] Could not bind loopback addresses; trying fallback to 0.0.0.0');
+      try {
+        const s = http.createServer(handleRequest);
+        s.on('error', (err) => console.error('[gmail:get_refresh_token] fallback server error:', err));
+        s.listen(port, () => {
+          console.log('[gmail:get_refresh_token] fallback listening on all interfaces:', JSON.stringify(s.address()));
+          servers.push(s);
+        });
+      } catch (e) {
+        console.error('[gmail:get_refresh_token] fallback listen failed:', e);
+        process.exit(1);
+      }
+    } else {
+      // Print the auth URL and attempt automatic open once servers are up.
+      console.log('\nPlease open the following URL in a browser to authorize:');
+      console.log('\n' + authUrl.toString() + '\n');
+      try { openBrowser(authUrl.toString()); } catch (e) {}
+      console.log('If you are on a different machine, copy this URL into a browser there.');
+      console.log('After granting access the browser will redirect to the local callback and the terminal will display the refresh token.');
     }
-    console.log('If you are on a different machine, copy this URL into a browser there.');
-    console.log('After granting access the browser will redirect to the local callback and the terminal will display the refresh token.');
-  });
+  }, 100);
 }
 
 main().catch((e) => {
