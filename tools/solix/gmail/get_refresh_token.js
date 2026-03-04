@@ -33,6 +33,9 @@ function getArg(name) {
   const i = args.indexOf(`--${name}`);
   return i !== -1 ? args[i + 1] : null;
 }
+// When spawned by tool.js the parent will open the browser after receiving
+// the READY signal; --no-open suppresses the duplicate browser launch here.
+const noOpen = args.includes('--no-open');
 
 // ── Auto-load solix config ────────────────────────────────────────────────────
 function loadSolixConfig() {
@@ -174,6 +177,25 @@ async function main() {
   // both increases reliability.
   const servers = [];
 
+  // Emitted once — signals parent process (tool.js) that the server is ready
+  // so the parent can open the browser at exactly the right moment.
+  let readyEmitted = false;
+  function onFirstListen() {
+    if (readyEmitted) return;
+    readyEmitted = true;
+    // Deterministic token read by tool.js stdout watcher.
+    process.stdout.write('[gmail:get_refresh_token] READY\n');
+    console.log('\nPlease open the following URL in a browser to authorize:');
+    console.log('\n' + authUrl.toString() + '\n');
+    // Only open here when running standalone (not spawned by tool.js which
+    // opens the browser itself after receiving READY).
+    if (!noOpen) {
+      try { openBrowser(authUrl.toString()); } catch (e) {}
+    }
+    console.log('If you are on a different machine, copy this URL into a browser there.');
+    console.log('After granting access the browser will redirect to the local callback and the terminal will display the refresh token.');
+  }
+
   // Helper to create+listen and attach diagnostics
   function makeServer(host) {
     const s = http.createServer(handleRequest);
@@ -184,43 +206,34 @@ async function main() {
       const a = s.address();
       try { console.log(`[gmail:get_refresh_token] listening on ${host}:`, JSON.stringify(a)); }
       catch (e) { console.log(`[gmail:get_refresh_token] listening on ${host}`); }
+      servers.push(s);
+      onFirstListen();
     });
     try {
       s.listen(port, host);
-      servers.push(s);
     } catch (e) {
       console.error(`[gmail:get_refresh_token] listen(${host}) failed:`, e && e.code ? e.code : e);
     }
   }
 
-  // Attempt IPv6 (::1) then IPv4 (127.0.0.1). If both fail, fall back to
-  // unspecified host (listen on all interfaces) as a last resort.
+  // Attempt IPv6 (::1) then IPv4 (127.0.0.1).
   makeServer('::1');
   makeServer('127.0.0.1');
 
+  // Safety net: if neither loopback bound, fall back to all interfaces.
   setTimeout(() => {
     if (servers.length === 0) {
-      console.error('[gmail:get_refresh_token] Could not bind loopback addresses; trying fallback to 0.0.0.0');
-      try {
-        const s = http.createServer(handleRequest);
-        s.on('error', (err) => console.error('[gmail:get_refresh_token] fallback server error:', err));
-        s.listen(port, () => {
-          console.log('[gmail:get_refresh_token] fallback listening on all interfaces:', JSON.stringify(s.address()));
-          servers.push(s);
-        });
-      } catch (e) {
-        console.error('[gmail:get_refresh_token] fallback listen failed:', e);
-        process.exit(1);
-      }
-    } else {
-      // Print the auth URL and attempt automatic open once servers are up.
-      console.log('\nPlease open the following URL in a browser to authorize:');
-      console.log('\n' + authUrl.toString() + '\n');
-      try { openBrowser(authUrl.toString()); } catch (e) {}
-      console.log('If you are on a different machine, copy this URL into a browser there.');
-      console.log('After granting access the browser will redirect to the local callback and the terminal will display the refresh token.');
+      console.error('[gmail:get_refresh_token] Could not bind loopback; falling back to 0.0.0.0');
+      const s = http.createServer(handleRequest);
+      s.on('error', (err) => console.error('[gmail:get_refresh_token] fallback server error:', err));
+      s.on('listening', () => {
+        console.log('[gmail:get_refresh_token] fallback listening on all interfaces:', JSON.stringify(s.address()));
+        servers.push(s);
+        onFirstListen();
+      });
+      s.listen(port);
     }
-  }, 100);
+  }, 500);
 }
 
 main().catch((e) => {
