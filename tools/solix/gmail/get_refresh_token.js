@@ -142,9 +142,34 @@ async function main() {
     console.log(`Listening on ${redirectUri}`);
     console.log('\nOpening browser... if nothing opens, paste this URL manually:');
     console.log('\n' + authUrl.toString() + '\n');
-    const cmd = process.platform === 'win32' ? `start "" "${authUrl}"` :
-                process.platform === 'darwin' ? `open "${authUrl}"` : `xdg-open "${authUrl}"`;
-    exec(cmd, (err) => { if (err) console.warn('Could not open browser:', err.message); });
+
+    // try the popular "open" package first; this works even when run as a
+    // subprocess of an Electron renderer because it uses the OS defaults.
+    // fall back to manual spawn of platform-specific command if the module is
+    // missing or fails.
+    (async () => {
+      try {
+        const openPkg = await import('open');
+        await openPkg.default(authUrl.toString());
+        return;
+      } catch (e) {
+        // ignore and fall back
+      }
+
+      // fallback: spawn the appropriate command directly
+      let child;
+      if (process.platform === 'win32') {
+        child = spawn('cmd', ['/c', 'start', '""', authUrl.toString()], {
+          detached: true,
+          stdio: 'ignore',
+        });
+      } else if (process.platform === 'darwin') {
+        child = spawn('open', [authUrl.toString()], { detached: true, stdio: 'ignore' });
+      } else {
+        child = spawn('xdg-open', [authUrl.toString()], { detached: true, stdio: 'ignore' });
+      }
+      if (child) child.unref();
+    })();
   });
 }
 
