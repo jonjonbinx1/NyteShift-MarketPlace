@@ -199,40 +199,52 @@ async function main() {
     rl.close();
   }
 
-  // Only listen on IPv4 for reliability
+  // Server factory with better error handling
   function makeServer(host) {
     const s = http.createServer(handleRequest);
+    
     s.on('error', (err) => {
       console.error(`[gmail:get_refresh_token] Server error on ${host}:`, err && err.code ? err.code : err);
     });
+    
+    s.on('connection', (sock) => {
+      console.log(`[gmail:get_refresh_token] client connected on ${host}`);
+      sock.on('error', (e) => {
+        console.error(`[gmail:get_refresh_token] socket error on ${host}:`, e && e.code ? e.code : e);
+      });
+    });
+
     s.on('listening', () => {
-      const a = s.address();      actualPort = a?.port || actualPort;      try { console.log(`[gmail:get_refresh_token] listening on ${host}:`, JSON.stringify(a)); }
+      const a = s.address();
+      actualPort = a?.port || actualPort;
+      try { console.log(`[gmail:get_refresh_token] listening on ${host}:`, JSON.stringify(a)); }
       catch (e) { console.log(`[gmail:get_refresh_token] listening on ${host}`); }
-      servers.push(s);
+      if (!servers.includes(s)) servers.push(s);
       onFirstListen();
     });
-    try {
-      s.listen(port, host);
-    } catch (e) {
-      console.error(`[gmail:get_refresh_token] listen(${host}) failed:`, e && e.code ? e.code : e);
-    }
+
+    s.on('clientError', (err) => {
+      console.error(`[gmail:get_refresh_token] client error on ${host}:`, err && err.code ? err.code : err);
+    });
+
+    s.listen(port, host, () => {
+      console.log(`[gmail:get_refresh_token] ${host}:${port} server listening (callback)`);
+    });
+
+    return s;
   }
 
-  // Only listen on IPv4
-  makeServer('127.0.0.1');
+  // Windows often needs 0.0.0.0 to avoid firewall issues with loopback-only bindings
+  const bindHost = process.platform === 'win32' ? '0.0.0.0' : '127.0.0.1';
+  console.log(`[gmail:get_refresh_token] attempting to bind on ${bindHost}...`);
+  makeServer(bindHost);
 
-  // Safety net: if neither loopback bound, fall back to all interfaces.
-  setTimeout(() => {
+  // Fallback: try the other option if first one fails after 500ms
+  const otherHost = bindHost === '0.0.0.0' ? '127.0.0.1' : '0.0.0.0';
+  const fallbackTimer = setTimeout(() => {
     if (servers.length === 0) {
-      console.error('[gmail:get_refresh_token] Could not bind loopback; falling back to 0.0.0.0');
-      const s = http.createServer(handleRequest);
-      s.on('error', (err) => console.error('[gmail:get_refresh_token] fallback server error:', err));
-      s.on('listening', () => {
-        console.log('[gmail:get_refresh_token] fallback listening on all interfaces:', JSON.stringify(s.address()));
-        servers.push(s);
-        onFirstListen();
-      });
-      s.listen(port);
+      console.error(`[gmail:get_refresh_token] ${bindHost} binding failed; trying ${otherHost}...`);
+      makeServer(otherHost);
     }
   }, 500);
 
