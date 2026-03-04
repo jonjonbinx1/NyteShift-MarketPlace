@@ -100,7 +100,11 @@ async function main() {
   const existingCode = getArg('code');
   const portInput = getArg('port');
   const port = parseInt(portInput ?? '3000', 10);
+  // Google OAuth does NOT allow 0.0.0.0 as a redirect URI. Use localhost for redirect URI,
+  // but bind the server to 0.0.0.0 to accept connections from all local addresses.
   const redirectUri = `http://localhost:${port}/oauth2callback`;
+  let actualPort = port;
+  const servers = [];
 
   const scopes = getArg('scopes') ?? solixCfg.scopes ??
     'https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send';
@@ -140,6 +144,7 @@ async function main() {
     process.exit(1);
   }
 
+  // Build auth URL using 127.0.0.1 so the callback lands on the correct listener
   const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
   authUrl.searchParams.set('client_id', clientId);
   authUrl.searchParams.set('redirect_uri', redirectUri);
@@ -150,102 +155,112 @@ async function main() {
 
   console.log(`\nStarting local callback server on port ${port}...`);
 
+  // Called once the first server successfully binds.
+  // Emits the READY signal so tool.js can open the browser, and also opens
+  // it locally when the script is run standalone (without --no-open).
+  let firstListenFired = false;
+  function onFirstListen() {
+    if (firstListenFired) return;
+    firstListenFired = true;
+    // Signal parent process (tool.js) with the full auth URL so it can open
+    // the browser and display it in the UI.
+    process.stdout.write(`READY ${authUrl.toString()}\n`);
+    if (!noOpen) {
+      console.log(`\nOpening browser for Google authorization...`);
+      console.log(`Auth URL: ${authUrl.toString()}`);
+      openBrowser(authUrl.toString());
+    }
+  }
+
   // Request handler shared across IPv4/IPv6 servers.
   async function handleRequest(req, res) {
-    if (!req.url) return;
+    if (!req.url) {
+      console.warn('[gmail:get_refresh_token] Received request with no URL');
+      return;
+    }
+    console.log(`[gmail:get_refresh_token] Incoming request: ${req.method} ${req.url}`);
     // Use the literal host we bound to when constructing the URL base so
     // parsing works regardless of whether browser used IPv4 or IPv6.
     const host = req.headers.host || `localhost:${port}`;
     const u = new URL(req.url, `http://${host}`);
     if (u.pathname !== '/oauth2callback') {
+      console.warn(`[gmail:get_refresh_token] 404 Not Found: ${u.pathname}`);
       res.writeHead(404); res.end('Not found'); return;
     }
     const code = u.searchParams.get('code');
     const error = u.searchParams.get('error');
     if (error) {
+      console.error(`[gmail:get_refresh_token] OAuth error: ${error}`);
       res.writeHead(400, { 'Content-Type': 'text/plain' });
       res.end(`OAuth error: ${error}`);
-      console.error('OAuth error:', error);
       // close all servers and exit
       servers.forEach((s) => { try { s.close(); } catch {} });
+      console.log('[gmail:get_refresh_token] Servers closed after OAuth error. Exiting.');
       process.exit(1);
     }
+    console.log('[gmail:get_refresh_token] Received valid /oauth2callback request. Sending 200 response.');
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Authorization received. You can close this tab. Check the terminal for the refresh token.');
     // close all servers and exchange the code
     servers.forEach((s) => { try { s.close(); } catch {} });
+    console.log('[gmail:get_refresh_token] Servers closed after successful callback. Exchanging code for tokens.');
     await exchangeCode({ clientId, clientSecret, code, redirectUri });
     rl.close();
   }
 
-  // Try to listen on both IPv6 and IPv4 loopback addresses so browsers
-  // using either family can reach the callback. Some platforms default to
-  // IPv6-only sockets which won't accept IPv4 connections, so attempting
-  // both increases reliability.
-  const servers = [];
-
-  // track the port we actually bound to (may differ when port 0 is used)
-  let actualPort = port;
-
-  // Emitted once — signals parent process (tool.js) that the server is ready
-  // so the parent can open the browser at exactly the right moment.  Include
-  // the full redirect URI, allowing the parent to adjust if a different port
-  // was selected due to conflicts.
-  let readyEmitted = false;
-  function onFirstListen() {
-    if (readyEmitted) return;
-    readyEmitted = true;
-    const redirect = `http://localhost:${actualPort}/oauth2callback`;
-    // tell the parent not only "READY" but also the URI it should open
-    process.stdout.write(`[gmail:get_refresh_token] READY ${redirect}\n`);
-    console.log('\nPlease open the following URL in a browser to authorize:');
-    console.log('\n' + redirect + '\n');
-    // Only open here when running standalone (not spawned by tool.js which
-    // opens the browser itself after receiving READY).
-    if (!noOpen) {
-      try { openBrowser(redirect); } catch (e) {}
-    }
-    console.log('If you are on a different machine, copy this URL into a browser there.');
-    console.log('After granting access the browser will redirect to the local callback and the terminal will display the refresh token.');
-  }
-
-  // Helper to create+listen and attach diagnostics
+  // Server factory with better error handling
   function makeServer(host) {
     const s = http.createServer(handleRequest);
+    
     s.on('error', (err) => {
       console.error(`[gmail:get_refresh_token] Server error on ${host}:`, err && err.code ? err.code : err);
     });
+    
+    s.on('connection', (sock) => {
+      console.log(`[gmail:get_refresh_token] client connected on ${host}`);
+      sock.on('error', (e) => {
+        console.error(`[gmail:get_refresh_token] socket error on ${host}:`, e && e.code ? e.code : e);
+      });
+    });
+
     s.on('listening', () => {
-      const a = s.address();      actualPort = a?.port || actualPort;      try { console.log(`[gmail:get_refresh_token] listening on ${host}:`, JSON.stringify(a)); }
+      const a = s.address();
+      actualPort = a?.port || actualPort;
+      try { console.log(`[gmail:get_refresh_token] listening on ${host}:`, JSON.stringify(a)); }
       catch (e) { console.log(`[gmail:get_refresh_token] listening on ${host}`); }
-      servers.push(s);
+      if (!servers.includes(s)) servers.push(s);
       onFirstListen();
     });
-    try {
-      s.listen(port, host);
-    } catch (e) {
-      console.error(`[gmail:get_refresh_token] listen(${host}) failed:`, e && e.code ? e.code : e);
-    }
+
+    s.on('clientError', (err) => {
+      console.error(`[gmail:get_refresh_token] client error on ${host}:`, err && err.code ? err.code : err);
+    });
+
+    s.listen(port, host, () => {
+      console.log(`[gmail:get_refresh_token] ${host}:${port} server listening (callback)`);
+    });
+
+    return s;
   }
 
-  // Attempt IPv6 (::1) then IPv4 (127.0.0.1).
-  makeServer('::1');
-  makeServer('127.0.0.1');
 
-  // Safety net: if neither loopback bound, fall back to all interfaces.
-  setTimeout(() => {
-    if (servers.length === 0) {
-      console.error('[gmail:get_refresh_token] Could not bind loopback; falling back to 0.0.0.0');
-      const s = http.createServer(handleRequest);
-      s.on('error', (err) => console.error('[gmail:get_refresh_token] fallback server error:', err));
-      s.on('listening', () => {
-        console.log('[gmail:get_refresh_token] fallback listening on all interfaces:', JSON.stringify(s.address()));
-        servers.push(s);
-        onFirstListen();
-      });
-      s.listen(port);
-    }
-  }, 500);
+  // Bind only to 0.0.0.0 for maximum compatibility (accepts connections from localhost, 127.0.0.1, ::1, etc.)
+  // The redirect URI must remain http://localhost:3000/oauth2callback for Google OAuth compliance.
+  const bindHost = '0.0.0.0';
+  console.log(`[gmail:get_refresh_token] attempting to bind on ${bindHost}:${port}...`);
+  try {
+    makeServer(bindHost);
+  } catch (e) {
+    console.error(`[gmail:get_refresh_token] Failed to bind server on ${bindHost}:${port}:`, e);
+  }
+
+  // Prevent exit until callback is received
+  process.on('SIGINT', () => {
+    console.log('[gmail:get_refresh_token] Received SIGINT, shutting down servers.');
+    servers.forEach((s) => { try { s.close(); } catch {} });
+    console.log('[gmail:get_refresh_token] All servers closed. Exiting.');
+    process.exit(0);
+  });
 }
 
 main().catch((e) => {

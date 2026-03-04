@@ -1,6 +1,6 @@
 ---
 name: email
-version: "1.0.0"
+version: "2.0.0"
 contributor: solix
 description: "Read, compose, send, organise and template emails using any connected mail provider."
 tags:
@@ -21,7 +21,7 @@ inputs:
   - name: context
     type: object
     required: false
-    description: "Optional extra context such as thread ID, label, or sender filter."
+    description: "Optional extra context such as mailbox path, message UID, or sender filter."
 
 outputs:
   goal: string
@@ -62,10 +62,10 @@ config:
       - reply
       - create-draft
       - move
-      - label
       - delete
       - create-template
       - list-templates
+      - list-mailboxes
     default:
       - read
       - search
