@@ -91,6 +91,42 @@ async function buildTransport(cfg) {
   });
 }
 
+/**
+ * Convert a Gmail-style query string to an imapflow-compatible IMAP SEARCH criteria object.
+ * Standard IMAP criteria are used where possible (as Thunderbird does).
+ * Falls back to Gmail's X-GM-RAW extension for complex/unrecognised queries.
+ */
+function buildSearchCriteria(query) {
+  const q = (query ?? '').trim();
+
+  // Blank / catch-all  →  all messages in the selected mailbox
+  if (!q || q === 'all' || q === 'in:anywhere') return { all: true };
+
+  // Common Gmail flags → standard IMAP flags
+  if (q === 'in:inbox')      return { all: true };   // already selected INBOX upstream
+  if (q === 'is:unread')     return { unseen: true };
+  if (q === 'is:read')       return { seen: true };
+  if (q === 'is:starred')    return { flagged: true };
+  if (q === 'is:important')  return { keyword: '\\Important' };
+
+  // Field-prefixed queries → proper IMAP criteria
+  const fromMatch    = q.match(/^from:(.+)$/i);
+  if (fromMatch)    return { from:    fromMatch[1].trim() };
+
+  const toMatch      = q.match(/^to:(.+)$/i);
+  if (toMatch)      return { to:      toMatch[1].trim() };
+
+  const subjectMatch = q.match(/^subject:(.+)$/i);
+  if (subjectMatch) return { subject: subjectMatch[1].trim() };
+
+  // Plain text with no operator → standard IMAP TEXT search
+  if (!/[:(]/.test(q)) return { text: q };
+
+  // Complex/Gmail-specific query → attempt X-GM-RAW (Gmail IMAP extension)
+  // imapflow passes unknown keys as raw IMAP search keywords; Gmail honours X-GM-RAW.
+  return { xgmRaw: q };
+}
+
 /** Parse the plain-text body out of a raw MIME buffer via mailparser. */
 async function parseMessage(source) {
   const { simpleParser } = await import('mailparser');
@@ -331,21 +367,21 @@ const toolImpl = {
           return await withImap(cfg, async (client) => {
             const lock = await client.getMailboxLock(mailbox);
             try {
-              // Gmail IMAP supports X-GM-RAW for Gmail-style search strings.
-              // Fall back to a basic SUBJECT/TEXT search when not connected to Gmail.
-              let criteria;
+              // Build standard IMAP SEARCH criteria (same approach as Thunderbird).
+              // Falls back to Gmail X-GM-RAW for complex queries, then to { all: true }.
+              const criteria = buildSearchCriteria(input.query);
+              let raw;
               try {
-                // imapflow search criteria: { xgmRaw: '...' } for Gmail
-                criteria = { xgmRaw: input.query };
+                raw = await client.search(criteria, { uid: true });
               } catch {
-                criteria = { text: input.query };
+                // If the criteria was rejected (e.g. X-GM-RAW not supported), fetch all.
+                raw = await client.search({ all: true }, { uid: true });
               }
-              const raw = await client.search(criteria, { uid: true });
-              // Normalize
+              // Normalize — imapflow can return an array, Set, single number, or null
               let uids = [];
               if (Array.isArray(raw)) uids = raw;
               else if (raw instanceof Set) uids = [...raw];
-              else if (raw) uids = [raw]; // single UID case
+              else if (raw) uids = [raw];
 
               uids = uids.map(Number);
 
