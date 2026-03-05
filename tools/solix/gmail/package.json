@@ -1,0 +1,12 @@
+{
+  "name": "@solix/tool-gmail",
+  "version": "2.0.0",
+  "description": "Gmail IMAP/SMTP tool for SolixAI — App Password authentication",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "imapflow": "^1.0.0",
+    "mailparser": "^3.7.0",
+    "nodemailer": "^6.9.0"
+  }
+}

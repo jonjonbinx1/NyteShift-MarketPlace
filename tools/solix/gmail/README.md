@@ -1,51 +1,66 @@
 # Gmail Tool — README
 
-Purpose
-- Integrates with the Gmail REST API (v1) using OAuth2 refresh-token flow.
-- Provides read/search, send/reply, drafts, labels (folder-equivalent), move (add/remove labels), delete, and simple template management.
+## Overview
 
-Quick summary of required credentials
-- `clientId` — OAuth 2.0 Client ID
-- `clientSecret` — OAuth 2.0 Client Secret (store as secret)
-- `refreshToken` — OAuth2 refresh token for the account (store as secret)
-- `userEmail` — Mailbox address to target (default: `me`)
+Integrates with Gmail via **IMAP** (reading) and **SMTP** (sending), authenticated with a **Gmail App Password**. No Google Cloud project, OAuth client ID, or browser consent flow is required.
 
-Required OAuth scopes (only request what you need)
-- read/search: `https://www.googleapis.com/auth/gmail.readonly`
-- send/reply: `https://www.googleapis.com/auth/gmail.send`
-- create-draft: `https://www.googleapis.com/auth/gmail.compose`
-- modify/move/labels/delete/templates: `https://www.googleapis.com/auth/gmail.modify`
+## Prerequisites
 
-Generating a refresh token (recommended: use Google OAuth Playground for testing)
-1. Open: https://developers.google.com/oauthplayground
-2. Click the gear icon → check "Use your own OAuth credentials" and paste your `clientId` and `clientSecret`.
-3. In Step 1, enter the scopes you need (see list above), then "Authorize APIs" and complete sign-in.
-4. In Step 2, click "Exchange authorization code for tokens". Copy the `refresh_token` value.
+1. Enable **2-Step Verification** on the Google account (required for App Passwords).
+2. Go to **Google Account → Security → App passwords**.
+3. Select "Mail" → "Other (custom name)" → Generate.
+4. Copy the 16-character password shown (spaces are optional).
 
-Manual exchange (example curl to exchange an auth code for tokens)
-```bash
-curl -X POST https://oauth2.googleapis.com/token \
-  -d client_id=YOUR_CLIENT_ID \
-  -d client_secret=YOUR_CLIENT_SECRET \
-  -d code=AUTHORIZATION_CODE \
-  -d grant_type=authorization_code \
-  -d redirect_uri=YOUR_REDIRECT_URI
-```
-Response contains `access_token` and `refresh_token` (if `access_type=offline` and consent allowed).
+## Required credentials
 
-Tool configuration example (tool settings / runtime config)
+| Config key    | Description                                      |
+|---------------|--------------------------------------------------|
+| `email`       | Full Gmail address, e.g. `you@gmail.com`         |
+| `appPassword` | 16-character App Password (spaces are stripped)  |
+
+## Servers
+
+| Protocol | Host              | Port | Security    |
+|----------|-------------------|------|-------------|
+| IMAP     | imap.gmail.com    | 993  | TLS         |
+| SMTP     | smtp.gmail.com    | 587  | STARTTLS    |
+
+## Gmail IMAP mailbox paths
+
+| Folder          | IMAP path              |
+|-----------------|------------------------|
+| Inbox           | `INBOX`                |
+| Sent Mail       | `[Gmail]/Sent Mail`    |
+| Drafts          | `[Gmail]/Drafts`       |
+| All Mail        | `[Gmail]/All Mail`     |
+| Trash           | `[Gmail]/Trash`        |
+| Spam            | `[Gmail]/Spam`         |
+| Starred         | `[Gmail]/Starred`      |
+| Custom labels   | appear as top-level folders, e.g. `Work` |
+
+## Tool configuration example
+
 ```json
 {
-  "clientId": "your-client-id.apps.googleusercontent.com",
-  "clientSecret": "<secret>",
-  "refreshToken": "<secret>",
-  "userEmail": "me",
-  "allowedOperations": ["read","search","label","move","send","reply","create-draft","create-template","list-templates"],
+  "email": "you@gmail.com",
+  "appPassword": "abcd efgh ijkl mnop",
+  "allowedOperations": ["read","search","send","reply","create-draft","move","delete","create-template","list-templates","list-mailboxes"],
   "maxResults": 20,
-  "templateLabel": "SolixTemplates",
-  "trashOnDelete": true
+  "defaultMailbox": "INBOX",
+  "trashOnDelete": true,
+  "templateMailbox": "SolixTemplates"
 }
 ```
+
+## npm dependencies
+
+Install in this directory before running:
+
+```bash
+npm install
+```
+
+Packages: `imapflow`, `nodemailer`, `mailparser`.
 
 Example runtime calls (payloads to the tool's `run` entry)
 - Create a label (folder equivalent)
