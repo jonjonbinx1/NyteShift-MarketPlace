@@ -1,10 +1,45 @@
 ﻿/**
  * Gmail Tool â€” SolixAI Marketplace
  * Contributor : solix
- * Version     : 2.0.0
- *
- * Reads mail via IMAP and sends via SMTP â€” authenticated with a Gmail App Password.
- * No OAuth credentials or Google Cloud project are required.
+        // â”€â”€ FLAG MANAGEMENT â”€â”€
+        // Provide explicit markRead / markUnread actions to add/remove the \Seen flag.
+
+        case "markRead": {
+          assertAllowed(cfg, "mark-read");
+          if (!input.uid && !input.uids) throw new Error("uid or uids is required.");
+          const srcMailbox = input.mailbox ?? defaultMailbox;
+          return await withImap(cfg, async (client) => {
+            const lock = await client.getMailboxLock(srcMailbox);
+            try {
+              const spec = input.uids ? { uid: input.uids } : { uid: input.uid };
+              await client.messageFlagsAdd(spec, ['\\Seen'], { uid: true });
+              return { ok: true, action: 'marked-read', uids: Array.isArray(input.uids) ? input.uids : [input.uid] };
+            } finally {
+              lock.release();
+            }
+          });
+        }
+
+        case "markUnread": {
+          assertAllowed(cfg, "mark-unread");
+          if (!input.uid && !input.uids) throw new Error("uid or uids is required.");
+          const srcMailbox = input.mailbox ?? defaultMailbox;
+          return await withImap(cfg, async (client) => {
+            const lock = await client.getMailboxLock(srcMailbox);
+            try {
+              const spec = input.uids ? { uid: input.uids } : { uid: input.uid };
+              await client.messageFlagsRemove(spec, ['\\Seen'], { uid: true });
+              return { ok: true, action: 'marked-unread', uids: Array.isArray(input.uids) ? input.uids : [input.uid] };
+            } finally {
+              lock.release();
+            }
+          });
+        }
+
+        // Templates are stored as plain messages in a dedicated IMAP mailbox.
+        // A [TPL:name] prefix in the subject is used for identification.
+
+        case "createTemplate": {
  *
  * Prerequisites
  *   1. Enable 2-Step Verification on the Google account.
@@ -218,6 +253,8 @@ const toolImpl = {
         "create-template",
         "list-templates",
         "list-mailboxes",
+        "mark-read",
+        "mark-unread",
       ],
       default: ["read", "search"],
       description:
@@ -289,7 +326,8 @@ const toolImpl = {
     }
 
     const { action } = input;
-    const maxResults = cfg.maxResults ?? 20;
+    // Allow per-call override of max results via input.maxResults, falling back to tool config.
+    const maxResults = Number(input.maxResults ?? cfg.maxResults ?? 20) || 20;
     const defaultMailbox = cfg.defaultMailbox ?? 'INBOX';
 
     try {
@@ -666,6 +704,8 @@ export const spec = {
           "deleteMessage",
           "createTemplate",
           "listTemplates",
+          "markRead",
+          "markUnread",
         ],
         description: "The Gmail operation to perform.",
       },
@@ -687,7 +727,13 @@ export const spec = {
       // â”€â”€ search â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       query: {
         type: "string",
-        description: "Gmail-style search query (e.g. 'from:alice is:unread') used by searchMessages. Gmail IMAP supports X-GM-RAW extension.",
+        description: "Gmail-style search query (e.g. 'from:alice is:unread') used by searchMessages. Gmail IMAP supports X-GM-RAW extension. Use the optional `maxResults` input to override the tool's per-request limit.",
+      },
+
+      // Per-call override for max results (1-200). If omitted, tool config `maxResults` is used.
+      maxResults: {
+        type: "number",
+        description: "Optional per-request override for the maximum number of messages to return (overrides tool config `maxResults`).",
       },
 
       // â”€â”€ compose fields â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
