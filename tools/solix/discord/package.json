@@ -1,0 +1,11 @@
+{
+  "name": "solix-discord",
+  "version": "1.0.0",
+  "main": "tool.js",
+  "description": "Solix Discord tool delegating to the Solix core Discord bridge",
+  "author": "solix",
+  "license": "MIT",
+  "peerDependencies": {
+    "@solix/core": "*"
+  }
+}
