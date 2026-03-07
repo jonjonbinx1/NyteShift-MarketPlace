@@ -95,8 +95,18 @@ const toolImpl = {
   ],
 
   run: async ({ input, context }) => {
-    const uiCfg = context?.config ?? {};
     const fileCfg = readSolixToolConfig();
+
+    // Accept UI config from several possible context shapes used by different loaders
+    const toolKey = 'solix/discord';
+    const ctx = context ?? {};
+    const candidates = [];
+    if (ctx.toolConfig && ctx.toolConfig[toolKey]) candidates.push(ctx.toolConfig[toolKey]);
+    if (ctx.config && ctx.config.toolConfig && ctx.config.toolConfig[toolKey]) candidates.push(ctx.config.toolConfig[toolKey]);
+    if (ctx.config && typeof ctx.config === 'object') candidates.push(ctx.config);
+    if (ctx.toolConfig && typeof ctx.toolConfig === 'object') candidates.push(ctx.toolConfig);
+
+    const uiCfg = Object.assign({}, ...candidates);
     const cfg = { ...fileCfg, ...uiCfg };
     cfg.defaultChannel = cfg.defaultChannel ?? '';
 
@@ -105,6 +115,10 @@ const toolImpl = {
 
     try {
       switch (action) {
+        case 'getConfig': {
+          return { ok: true, fileCfg, uiCfg, cfg };
+        }
+
         case 'sendMessage': {
           assertAllowed(cfg, 'send');
           const channelId = input.channelId ?? cfg.defaultChannel;
@@ -137,7 +151,7 @@ const toolImpl = {
         }
 
         default:
-          return { ok: false, error: `Unknown action "${action}". Supported: sendMessage, readMessages` };
+          return { ok: false, error: `Unknown action "${action}". Supported: sendMessage, readMessages, getConfig` };
       }
     } catch (err) {
       return { ok: false, error: err?.message ?? String(err) };
@@ -152,7 +166,7 @@ export const spec = {
     type: 'object',
     required: ['action'],
     properties: {
-      action: { type: 'string', enum: ['sendMessage', 'readMessages'] },
+      action: { type: 'string', enum: ['sendMessage', 'readMessages', 'getConfig'] },
       channelId: { type: 'string' },
       content: { type: 'string' },
       replyToId: { type: 'string' },
