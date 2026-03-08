@@ -30,10 +30,9 @@ function assertAllowed(config, operation) {
 }
 
 async function ensureBridge(context = {}) {
+  const ctx = context ?? {};
   // First, attempt to use a bridge / core instance passed via the tool `context`.
   try {
-    const ctx = context ?? {};
-
     // Direct candidates which might already be the bridge instance or core module
     const direct = ctx.bridge ?? ctx.bridgeInstance ?? ctx.core ?? ctx.solixCore ?? ctx.toolBridge ?? ctx.globalBridge ?? ctx.client;
     if (direct) {
@@ -61,10 +60,15 @@ async function ensureBridge(context = {}) {
       }
     }
   } catch (_) {}
-
-  // Fallback: try reading global Discord config (~/.solix/config.json -> globalDiscord)
+  // Fallback: try reading global Discord config (prefer injected helper if available)
   try {
-    const globalCfg = readGlobalDiscordConfig();
+    let globalCfg = null;
+    if (typeof ctx.readGlobalDiscordConfig === 'function') {
+      try { globalCfg = await ctx.readGlobalDiscordConfig(); } catch (_) { globalCfg = null; }
+    }
+    if (!globalCfg) {
+      globalCfg = readGlobalDiscordConfig();
+    }
     if (globalCfg && globalCfg.botToken) {
       return new RestDiscordBridge(globalCfg.botToken, globalCfg.guildId, globalCfg.baseUrl);
     }
@@ -466,6 +470,7 @@ const toolImpl = {
 export const spec = {
   name: 'discord',
   version: '1.0.0',
+  requiresBridge: true,
   inputSchema: {
     type: 'object',
     required: ['action'],
@@ -494,7 +499,7 @@ export const spec = {
       channelId: { type: 'string' },
     },
   },
-  verify: ['discord.sendMessage'],
+  verify: ['discord.send', 'discord.read'],
 };
 
 export default toolImpl;
