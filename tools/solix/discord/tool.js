@@ -259,7 +259,8 @@ async function resolveChannelId(bridgeOrCore, candidate) {
   if (m) return m[1];
   if (/^\d+$/.test(candidate)) return candidate; // already an ID
 
-  const name = String(candidate).replace(/^#/, '').toLowerCase();
+  const normalize = (s) => String(s ?? '').toLowerCase().replace(/^#/, '').replace(/\s+/g, '-').replace(/[^a-z0-9_-]/g, '');
+  const want = normalize(candidate);
 
   // If ensureBridge returned a core module, try to get the live bridge instance
   let inst = bridgeOrCore;
@@ -271,14 +272,14 @@ async function resolveChannelId(bridgeOrCore, candidate) {
 
   const client = inst?.client;
   if (client?.channels?.cache) {
-    // cached lookup
-    const found = client.channels.cache.find((c) => (c.name && c.name.toLowerCase() === name));
+    // cached lookup using normalized names
+    const found = client.channels.cache.find((c) => normalize(c.name) === want);
     if (found) return String(found.id);
     // try fetching channels from guilds (may be necessary if not cached)
     for (const g of client.guilds.cache.values()) {
       try {
         const channels = await g.channels.fetch();
-        const f = channels.find((c) => (c.name && c.name.toLowerCase() === name));
+        const f = channels.find((c) => normalize(c.name) === want);
         if (f) return String(f.id);
       } catch (_) {}
     }
@@ -288,7 +289,8 @@ async function resolveChannelId(bridgeOrCore, candidate) {
   try {
     if (typeof (inst?.resolveChannelByName) === 'function') {
       try {
-        const resolved = await inst.resolveChannelByName(name);
+        // Pass the original candidate so bridge can apply its own normalization/search scope.
+        const resolved = await inst.resolveChannelByName(String(candidate));
         if (resolved) return String(resolved);
       } catch (_) {}
     }
@@ -303,8 +305,8 @@ async function resolveChannelId(bridgeOrCore, candidate) {
       if (typeof cam.entries === 'function') {
         for (const [k, v] of cam.entries()) {
           try {
-            const keyStr = String(k ?? '').toLowerCase().replace(/^#/, '');
-            if (keyStr === name) {
+            const keyStr = normalize(k);
+            if (keyStr === want) {
               if (/^\d+$/.test(String(k))) return String(k);
               if (v && (v.id || v.channelId || v.channel?.id)) {
                 return String(v.id ?? v.channelId ?? v.channel.id);
@@ -318,8 +320,8 @@ async function resolveChannelId(bridgeOrCore, candidate) {
         // Plain object mapping
         for (const [k, v] of Object.entries(cam)) {
           try {
-            const keyStr = String(k ?? '').toLowerCase().replace(/^#/, '');
-            if (keyStr === name) {
+            const keyStr = normalize(k);
+            if (keyStr === want) {
               if (/^\d+$/.test(k)) return String(k);
               if (v && (v.id || v.channelId || v.channel?.id)) {
                 return String(v.id ?? v.channelId ?? v.channel.id);
