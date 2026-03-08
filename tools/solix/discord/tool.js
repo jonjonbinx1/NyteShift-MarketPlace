@@ -348,6 +348,18 @@ const toolImpl = {
     const cfg = { ...fileCfg, ...uiCfg };
     cfg.defaultChannel = cfg.defaultChannel ?? '';
 
+    // Optional: print raw tool input when debugging is enabled.
+    // Enable by setting the environment variable: SOLIX_DEBUG_PROVIDER_RAW=1
+    try {
+      if (typeof process !== 'undefined' && process.env && process.env.SOLIX_DEBUG_PROVIDER_RAW === '1') {
+        try {
+          console.debug('[discord] RAW TOOL INPUT:', JSON.stringify(input, null, 2));
+        } catch (e) {
+          console.debug('[discord] RAW TOOL INPUT (non-serializable):', input);
+        }
+      }
+    } catch (e) {}
+
     if (!input || typeof input.action !== 'string') return { ok: false, error: 'action is required' };
     const action = input.action;
 
