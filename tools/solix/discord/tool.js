@@ -280,6 +280,16 @@ async function resolveChannelId(bridgeOrCore, candidate) {
     }
   }
 
+  // If the bridge/core exposes a resolver helper, try it (e.g., RestDiscordBridge.resolveChannelByName)
+  try {
+    if (typeof (inst?.resolveChannelByName) === 'function') {
+      try {
+        const resolved = await inst.resolveChannelByName(name);
+        if (resolved) return String(resolved);
+      } catch (_) {}
+    }
+  } catch (_) {}
+
   // Fallback: check a channelAgentMap or similar mapping on the bridge/core.
   // Keys may be IDs or names; values may contain IDs as properties.
   try {
@@ -386,15 +396,24 @@ const toolImpl = {
         case 'sendMessage': {
           assertAllowed(cfg, 'send');
           const bridge = await ensureBridge(context);
-
           // Accept a channel name (`channel`) or an ID (`channelId`). Prefer `channel` (UI friendly).
           let channelCandidate = input.channel ?? input.channelId ?? cfg.defaultChannel ?? '';
           if (channelCandidate && !/^\d+$/.test(String(channelCandidate))) {
             const resolved = await resolveChannelId(bridge, channelCandidate);
-            if (resolved) channelCandidate = resolved;
+            if (resolved) {
+              channelCandidate = resolved;
+            } else if (typeof bridge?.resolveChannelByName === 'function') {
+              try {
+                const r = await bridge.resolveChannelByName(channelCandidate);
+                if (r) channelCandidate = r;
+              } catch (_) {}
+            }
           }
 
-          if (!channelCandidate) throw new Error('channelId is required');
+          // Validate we have a numeric Discord channel ID before sending.
+          if (!channelCandidate || !/^\d+$/.test(String(channelCandidate))) {
+            throw new Error(`Channel "${String(input.channel ?? input.channelId ?? '')}" could not be resolved to a Discord channel ID`);
+          }
           if (!input.content) throw new Error('content is required');
 
           const options = { ...(input.options ?? {}) };
@@ -411,9 +430,16 @@ const toolImpl = {
           let channelCandidate = input.channel ?? input.channelId ?? cfg.defaultChannel ?? '';
           if (channelCandidate && !/^\d+$/.test(String(channelCandidate))) {
             const resolved = await resolveChannelId(bridge, channelCandidate);
-            if (resolved) channelCandidate = resolved;
+            if (resolved) {
+              channelCandidate = resolved;
+            } else if (typeof bridge?.resolveChannelByName === 'function') {
+              try {
+                const r = await bridge.resolveChannelByName(channelCandidate);
+                if (r) channelCandidate = r;
+              } catch (_) {}
+            }
           }
-          if (!channelCandidate) throw new Error('channelId is required');
+          if (!channelCandidate || !/^\d+$/.test(String(channelCandidate))) throw new Error(`Channel "${String(input.channel ?? input.channelId ?? '')}" could not be resolved to a Discord channel ID`);
 
           const opts = { limit: input.limit ?? 50, before: input.before, after: input.after };
           const raw = await fetchViaBridge(bridge, channelCandidate, opts);
