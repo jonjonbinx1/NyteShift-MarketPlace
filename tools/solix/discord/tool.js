@@ -29,7 +29,40 @@ function assertAllowed(config, operation) {
   }
 }
 
-async function ensureBridge() {
+async function ensureBridge(context = {}) {
+  // First, attempt to use a bridge / core instance passed via the tool `context`.
+  try {
+    const ctx = context ?? {};
+
+    // Direct candidates which might already be the bridge instance or core module
+    const direct = ctx.bridge ?? ctx.bridgeInstance ?? ctx.core ?? ctx.solixCore ?? ctx.toolBridge ?? ctx.globalBridge ?? ctx.client;
+    if (direct) {
+      // If it's a function that returns the bridge, call it
+      if (typeof direct === 'function') {
+        try {
+          const b = direct();
+          if (b && typeof b.then === 'function') return await b;
+          if (b) return b;
+        } catch (_) {}
+      } else {
+        return direct;
+      }
+    }
+
+    // Also allow the context to expose getter functions directly
+    const maybeGetters = ['getGlobalBridge', 'getBridge', 'getBridgeInstance', 'startGlobalBridge', 'startBridge'];
+    for (const fn of maybeGetters) {
+      if (typeof ctx[fn] === 'function') {
+        try {
+          const b = ctx[fn]();
+          if (b && typeof b.then === 'function') return await b;
+          if (b) return b;
+        } catch (_) {}
+      }
+    }
+  } catch (_) {}
+
+  // Fallback: try importing @solix/core if available
   try {
     const core = await import('@solix/core');
     const getBridge = core.getGlobalBridge ?? core.getBridge ?? core.getBridgeInstance;
@@ -52,7 +85,9 @@ async function ensureBridge() {
     if (!bridge) throw new Error('Solix core bridge not available.');
     return bridge;
   } catch (e) {
-    throw new Error(`Could not import @solix/core: ${e.message}`);
+    throw new Error(
+      `Solix core not found and no bridge provided in context. ` +
+      `Install @solix/core or pass a bridge instance via the tool context (e.g. context.bridge or context.getGlobalBridge).`);
   }
 }
 
