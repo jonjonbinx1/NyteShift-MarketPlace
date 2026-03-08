@@ -154,19 +154,51 @@ class RestDiscordBridge {
 
   async sendDiscordMessage(channelId, content, options = {}) {
     const path = `/channels/${channelId}/messages`;
-    let payload;
-    if (content && typeof content === 'object' && !options) {
+    let payload = {};
+
+    // Allow passing a full payload object as `content` when options are empty/null
+    if (content && typeof content === 'object' && (!options || (typeof options === 'object' && Object.keys(options).length === 0))) {
       payload = content;
     } else {
-      payload = { content: content ?? '' };
+      // Normalize content to string and enforce Discord limits
+      let text = content == null ? '' : String(content);
+      if (text.length > 2000) text = text.slice(0, 2000);
+      payload.content = text;
+
+      // Map common convenience options to Discord API fields (whitelist only)
       if (options && typeof options === 'object') {
-        if (options.replyToId) payload.message_reference = { message_id: options.replyToId };
-        for (const k of Object.keys(options)) {
+        if (options.replyToId) payload.message_reference = { message_id: String(options.replyToId) };
+
+        const map = {
+          tts: 'tts',
+          embeds: 'embeds',
+          embed: 'embeds',
+          allowed_mentions: 'allowed_mentions',
+          allowedMentions: 'allowed_mentions',
+          components: 'components',
+          sticker_ids: 'sticker_ids',
+          stickerIds: 'sticker_ids',
+          flags: 'flags',
+          nonce: 'nonce'
+        };
+
+        for (const [k, v] of Object.entries(options)) {
           if (k === 'replyToId') continue;
-          payload[k] = options[k];
+          const target = map[k];
+          if (!target) continue;
+          if (target === 'embeds') {
+            if (k === 'embed' && v && !Array.isArray(v)) payload.embeds = [v];
+            else payload.embeds = v;
+          } else {
+            payload[target] = v;
+          }
         }
       }
     }
+
+    // Attachments/multipart are not supported by this simple REST bridge yet
+    if (payload.attachments) throw new Error('Attachments are not supported by RestDiscordBridge (multipart form-data required).');
+
     return await this._fetch(path, { method: 'POST', body: payload });
   }
 
