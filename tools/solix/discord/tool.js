@@ -62,32 +62,19 @@ async function ensureBridge(context = {}) {
     }
   } catch (_) {}
 
-  // Fallback: try importing @solix/core if available
+  // Fallback: try reading global Discord config (~/.solix/config.json -> globalDiscord)
   try {
-    const core = await import('@solix/core');
-    const getBridge = core.getGlobalBridge ?? core.getBridge ?? core.getBridgeInstance;
-    const startBridge = core.startGlobalBridge ?? core.startBridge;
-
-    let bridge = null;
-    if (typeof getBridge === 'function') {
-      bridge = getBridge();
-      if (bridge && typeof bridge.then === 'function') bridge = await bridge;
+    const globalCfg = readGlobalDiscordConfig();
+    if (globalCfg && globalCfg.botToken) {
+      return new RestDiscordBridge(globalCfg.botToken, globalCfg.guildId, globalCfg.baseUrl);
     }
-    if (!bridge && typeof startBridge === 'function') {
-      bridge = await startBridge();
-    }
-
-    // If the core exports helpers directly, treat core as a thin bridge
-    if (!bridge && (typeof core.sendDiscordMessage === 'function' || typeof core.fetchDiscordMessages === 'function')) {
-      return core;
-    }
-
-    if (!bridge) throw new Error('Solix core bridge not available.');
-    return bridge;
+    throw new Error('No bridge found in context and no globalDiscord.botToken configured.');
   } catch (e) {
     throw new Error(
-      `Solix core not found and no bridge provided in context. ` +
-      `Install @solix/core or pass a bridge instance via the tool context (e.g. context.bridge or context.getGlobalBridge).`);
+      `No bridge provided in context and no global Discord bot token found. ` +
+      `Provide a bridge via the tool context (e.g. context.bridge or context.getGlobalBridge), ` +
+      `or configure ~/.solix/config.json with { "globalDiscord": { "botToken": "<token>", "guildId": "<guild>" } }.`
+    );
   }
 }
 
@@ -103,6 +90,115 @@ async function fetchViaBridge(bridge, channelId, opts = {}) {
   if (typeof bridge.fetchMessages === 'function') return await bridge.fetchMessages(channelId, opts);
   if (typeof bridge.getMessages === 'function') return await bridge.getMessages(channelId, opts);
   throw new Error('Bridge does not expose a fetch function.');
+}
+
+// Read global Discord config block from ~/.solix/config.json synchronously
+function readGlobalDiscordConfig() {
+  try {
+    const cfgPath = join(homedir(), '.solix', 'config.json');
+    const raw = readFileSync(cfgPath, 'utf-8');
+    const parsed = JSON.parse(raw);
+    return parsed?.globalDiscord ?? null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Minimal REST-based Discord bridge wrapper (uses globalThis.fetch or node-fetch)
+class RestDiscordBridge {
+  constructor(botToken, guildId, baseUrl = 'https://discord.com/api/v10') {
+    if (!botToken) throw new Error('RestDiscordBridge requires a bot token');
+    this.token = botToken;
+    this.guildId = guildId ?? null;
+    this.baseUrl = (baseUrl || 'https://discord.com/api/v10').replace(/\/$/, '');
+  }
+
+  async _getFetch() {
+    if (typeof globalThis.fetch === 'function') return globalThis.fetch.bind(globalThis);
+    try {
+      const mod = await import('node-fetch');
+      return (mod.default ?? mod);
+    } catch (e) {
+      throw new Error('No fetch available (install node-fetch or use Node 18+).');
+    }
+  }
+
+  async _fetch(path, { method = 'GET', body = null, headers = {} } = {}) {
+    const fetchFn = await this._getFetch();
+    const url = path.startsWith('http') ? path : `${this.baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;
+    const h = Object.assign({}, headers, { Authorization: `Bot ${this.token}` });
+    let b = body;
+    if (b != null && typeof b === 'object' && !(b instanceof Buffer)) {
+      h['Content-Type'] = h['Content-Type'] ?? 'application/json';
+      b = JSON.stringify(b);
+    }
+    const res = await fetchFn(url, { method, headers: h, body: b });
+    let text;
+    try { text = await res.text(); } catch (e) { text = ''; }
+    const ctype = (res.headers && typeof res.headers.get === 'function') ? res.headers.get('content-type') : (res.headers && res.headers['content-type']) || '';
+    let data = null;
+    if (ctype && ctype.includes('application/json')) {
+      try { data = JSON.parse(text); } catch (e) { data = text; }
+    } else {
+      data = text;
+    }
+    if (!res.ok) {
+      const msg = (data && data.message) ? `${data.message}` : text || res.statusText;
+      const err = new Error(`Discord API ${res.status} ${res.statusText}: ${msg}`);
+      err.status = res.status;
+      err.body = data;
+      throw err;
+    }
+    return data;
+  }
+
+  async sendDiscordMessage(channelId, content, options = {}) {
+    const path = `/channels/${channelId}/messages`;
+    let payload;
+    if (content && typeof content === 'object' && !options) {
+      payload = content;
+    } else {
+      payload = { content: content ?? '' };
+      if (options && typeof options === 'object') {
+        if (options.replyToId) payload.message_reference = { message_id: options.replyToId };
+        for (const k of Object.keys(options)) {
+          if (k === 'replyToId') continue;
+          payload[k] = options[k];
+        }
+      }
+    }
+    return await this._fetch(path, { method: 'POST', body: payload });
+  }
+
+  sendMessage(channelId, payload) { return this.sendDiscordMessage(channelId, payload); }
+  send(channelId, content, options) { return this.sendDiscordMessage(channelId, content, options); }
+
+  async fetchDiscordMessages(channelId, opts = {}) {
+    const params = [];
+    if (opts.limit) params.push(`limit=${encodeURIComponent(String(opts.limit))}`);
+    if (opts.before) params.push(`before=${encodeURIComponent(String(opts.before))}`);
+    if (opts.after) params.push(`after=${encodeURIComponent(String(opts.after))}`);
+    const qs = params.length ? `?${params.join('&')}` : '';
+    const path = `/channels/${channelId}/messages${qs}`;
+    return await this._fetch(path, { method: 'GET' });
+  }
+  fetchMessages(channelId, opts) { return this.fetchDiscordMessages(channelId, opts); }
+  getMessages(channelId, opts) { return this.fetchDiscordMessages(channelId, opts); }
+
+  async resolveChannelByName(name) {
+    if (!this.guildId) return null;
+    try {
+      const path = `/guilds/${this.guildId}/channels`;
+      const channels = await this._fetch(path, { method: 'GET' });
+      const target = String(name).replace(/^#/, '').toLowerCase();
+      for (const c of channels) {
+        if (c && c.name && String(c.name).toLowerCase() === target) return String(c.id);
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
 }
 
 // helper: return snowflake string or null
