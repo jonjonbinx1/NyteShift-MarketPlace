@@ -132,6 +132,20 @@ class RestDiscordBridge {
       h['Content-Type'] = h['Content-Type'] ?? 'application/json';
       b = JSON.stringify(b);
     }
+    try {
+      if (typeof process !== 'undefined' && process.env && process.env.SOLIX_DEBUG_PROVIDER_RAW === '1') {
+        const safeHeaders = Object.assign({}, h);
+        if (safeHeaders.Authorization) safeHeaders.Authorization = '<REDACTED>';
+        let dbgBody = b;
+        if (dbgBody instanceof Buffer) dbgBody = `<Buffer length=${dbgBody.length}>`;
+        else if (typeof dbgBody === 'string') {
+          dbgBody = dbgBody.length > 2000 ? dbgBody.slice(0, 2000) + '...[truncated]' : dbgBody;
+        } else {
+          try { dbgBody = JSON.stringify(dbgBody, null, 2); } catch (e) { dbgBody = String(dbgBody); }
+        }
+        console.debug('[discord] OUTGOING', method, url, 'headers:', safeHeaders, 'body:', dbgBody);
+      }
+    } catch (e) {}
     const res = await fetchFn(url, { method, headers: h, body: b });
     let text;
     try { text = await res.text(); } catch (e) { text = ''; }
