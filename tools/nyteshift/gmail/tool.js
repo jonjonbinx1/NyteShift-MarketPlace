@@ -1,6 +1,6 @@
 ﻿/**
- * Gmail Tool â€” SolixAI Marketplace
- * Contributor : solix
+ * Gmail Tool â€” NyteShift Marketplace
+ * Contributor : nyteshift
         // â”€â”€ FLAG MANAGEMENT â”€â”€
         // Provide explicit markRead / markUnread actions to add/remove the \Seen flag.
 
@@ -64,15 +64,15 @@ import { join } from "node:path";
 
 // â”€â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-/** Read the solix/gmail tool config directly from ~/.solix/config.json. */
-function readSolixToolConfig() {
+/** Read the nyteshift/gmail tool config directly from ~/.nyteshift/config.json. */
+function readNyteShiftToolConfig() {
   try {
-    const cfgPath = join(homedir(), '.solix', 'config.json');
+    const cfgPath = join(homedir(), '.nyteshift', 'config.json');
     const raw = readFileSync(cfgPath, 'utf-8');
     const parsed = JSON.parse(raw);
-    return parsed?.toolConfig?.['solix/gmail'] ?? {};
+    return parsed?.toolConfig?.['nyteshift/gmail'] ?? {};
   } catch (e) {
-    console.warn('[gmail] could not read ~/.solix/config.json:', e.message);
+    console.warn('[gmail] could not read ~/.nyteshift/config.json:', e.message);
     return {};
   }
 }
@@ -183,7 +183,7 @@ async function parseMessage(source) {
 const toolImpl = {
   name: "gmail",
   version: "2.0.0",
-  contributor: "solix",
+  contributor: "nyteshift",
   description: "Read, search, send and organise Gmail messages via IMAP/SMTP using an App Password.",
 
   config: [
@@ -292,7 +292,7 @@ const toolImpl = {
       key: "templateMailbox",
       label: "Template Mailbox Name",
       type: "string",
-      default: "SolixTemplates",
+      default: "NyteShiftTemplates",
       description:
         "IMAP mailbox (folder) used to store reusable email templates. " +
         "Will be created automatically on first template save if it does not exist.",
@@ -303,7 +303,7 @@ const toolImpl = {
 
   run: async ({ input, context }) => {
     const uiCfg   = context?.config ?? {};
-    const fileCfg = readSolixToolConfig();
+    const fileCfg = readNyteShiftToolConfig();
 
     // Merge: file config as baseline; UI config on top.
     // Never let UI overwrite credentials with an empty string.
@@ -718,12 +718,12 @@ const toolImpl = {
           if (!input.name || !input.subject || !input.body) {
             throw new Error("name, subject, and body are required.");
           }
-          const tmplMailbox = cfg.templateMailbox ?? 'SolixTemplates';
+          const tmplMailbox = cfg.templateMailbox ?? 'NyteShiftTemplates';
           const nodemailer = await import('nodemailer');
           const transport = nodemailer.createTransport({ streamTransport: true, newline: 'crlf' });
           const { message } = await transport.sendMail({
             from:    cfg.email,
-            to:      'template@solix.internal',
+            to:      'template@nyteshift.internal',
             subject: `[TPL:${input.name}] ${input.subject}`,
             text:    input.body,
           });
@@ -745,7 +745,7 @@ const toolImpl = {
 
         case "listTemplates": {
           assertAllowed(cfg, "list-templates");
-          const tmplMailbox = cfg.templateMailbox ?? 'SolixTemplates';
+          const tmplMailbox = cfg.templateMailbox ?? 'NyteShiftTemplates';
           return await withImap(cfg, async (client) => {
             const exists = await client.mailboxExists(tmplMailbox).catch(() => false);
             if (!exists) return { ok: true, templates: [] };

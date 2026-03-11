@@ -1,8 +1,8 @@
 /**
- * Discord Tool — SolixAI Marketplace
- * Contributor: solix
+ * Discord Tool — NyteShift Marketplace
+ * Contributor: nyteshift
  *
- * Minimal send/read tool that delegates to the Solix core Discord bridge.
+ * Minimal send/read tool that delegates to the NyteShift core Discord bridge.
  * Does NOT modify any package.json; relies on the bridge for tokens/config.
  */
 
@@ -10,14 +10,14 @@ import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-function readSolixToolConfig() {
+function readNyteShiftToolConfig() {
   try {
-    const cfgPath = join(homedir(), '.solix', 'config.json');
+    const cfgPath = join(homedir(), '.nyteshift', 'config.json');
     const raw = readFileSync(cfgPath, 'utf-8');
     const parsed = JSON.parse(raw);
-    return parsed?.toolConfig?.['solix/discord'] ?? {};
+    return parsed?.toolConfig?.['nyteshift/discord'] ?? {};
   } catch (e) {
-    console.warn('[discord] could not read ~/.solix/config.json:', e.message);
+    console.warn('[discord] could not read ~/.nyteshift/config.json:', e.message);
     return {};
   }
 }
@@ -34,7 +34,7 @@ async function ensureBridge(context = {}) {
   // First, attempt to use a bridge / core instance passed via the tool `context`.
   try {
     // Direct candidates which might already be the bridge instance or core module
-    const direct = ctx.bridge ?? ctx.bridgeInstance ?? ctx.core ?? ctx.solixCore ?? ctx.toolBridge ?? ctx.globalBridge ?? ctx.client;
+    const direct = ctx.bridge ?? ctx.bridgeInstance ?? ctx.core ?? ctx.nyteshiftCore ?? ctx.toolBridge ?? ctx.globalBridge ?? ctx.client;
     if (direct) {
       // If it's a function that returns the bridge, call it
       if (typeof direct === 'function') {
@@ -77,7 +77,7 @@ async function ensureBridge(context = {}) {
     throw new Error(
       `No bridge provided in context and no global Discord bot token found. ` +
       `Provide a bridge via the tool context (e.g. context.bridge or context.getGlobalBridge), ` +
-      `or configure ~/.solix/config.json with { "globalDiscord": { "botToken": "<token>", "guildId": "<guild>" } }.`
+      `or configure ~/.nyteshift/config.json with { "globalDiscord": { "botToken": "<token>", "guildId": "<guild>" } }.`
     );
   }
 }
@@ -102,10 +102,10 @@ async function fetchViaBridge(bridge, channelId, opts = {}) {
   throw new Error('Bridge does not expose a fetch function.');
 }
 
-// Read global Discord config block from ~/.solix/config.json synchronously
+// Read global Discord config block from ~/.nyteshift/config.json synchronously
 function readGlobalDiscordConfig() {
   try {
-    const cfgPath = join(homedir(), '.solix', 'config.json');
+    const cfgPath = join(homedir(), '.nyteshift', 'config.json');
     const raw = readFileSync(cfgPath, 'utf-8');
     const parsed = JSON.parse(raw);
     return parsed?.globalDiscord ?? null;
@@ -143,7 +143,7 @@ class RestDiscordBridge {
       b = JSON.stringify(b);
     }
     try {
-      if (typeof process !== 'undefined' && process.env && process.env.SOLIX_DEBUG_PROVIDER_RAW === '1') {
+      if (typeof process !== 'undefined' && process.env && process.env.NYTESHIFT_DEBUG_PROVIDER_RAW === '1') {
         const safeHeaders = Object.assign({}, h);
         if (safeHeaders.Authorization) safeHeaders.Authorization = '<REDACTED>';
         let dbgBody = b;
@@ -399,8 +399,8 @@ async function resolveChannelId(bridgeOrCore, candidate) {
 const toolImpl = {
   name: 'discord',
   version: '1.0.0',
-  contributor: 'solix',
-  description: 'Send and read Discord messages via the Solix Discord bridge.',
+  contributor: 'nyteshift',
+  description: 'Send and read Discord messages via the NyteShift Discord bridge.',
 
   config: [
     {
@@ -421,10 +421,10 @@ const toolImpl = {
   ],
 
   run: async ({ input, context }) => {
-    const fileCfg = readSolixToolConfig();
+    const fileCfg = readNyteShiftToolConfig();
 
     // Accept UI config from several possible context shapes used by different loaders
-    const toolKey = 'solix/discord';
+    const toolKey = 'nyteshift/discord';
     const ctx = context ?? {};
     const candidates = [];
     if (ctx.toolConfig && ctx.toolConfig[toolKey]) candidates.push(ctx.toolConfig[toolKey]);
@@ -437,9 +437,9 @@ const toolImpl = {
     cfg.defaultChannel = cfg.defaultChannel ?? '';
 
     // Optional: print raw tool input when debugging is enabled.
-    // Enable by setting the environment variable: SOLIX_DEBUG_PROVIDER_RAW=1
+    // Enable by setting the environment variable: NYTESHIFT_DEBUG_PROVIDER_RAW=1
     try {
-      if (typeof process !== 'undefined' && process.env && process.env.SOLIX_DEBUG_PROVIDER_RAW === '1') {
+      if (typeof process !== 'undefined' && process.env && process.env.NYTESHIFT_DEBUG_PROVIDER_RAW === '1') {
         try {
           console.debug('[discord] RAW TOOL INPUT:', JSON.stringify(input, null, 2));
         } catch (e) {

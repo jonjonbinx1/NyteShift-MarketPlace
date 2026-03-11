@@ -1,7 +1,7 @@
 ---
 name: email
 version: "2.0.0"
-contributor: solix
+contributor: nyteshift
 description: "Read, compose, send, organise and template emails using any connected mail provider."
 tags:
   - communication

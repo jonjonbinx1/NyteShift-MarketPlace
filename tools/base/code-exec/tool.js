@@ -68,13 +68,13 @@ export default {
 
     switch (language) {
       case "python": {
-        tmpFile = join(tmpdir(), `solix-exec-${id}.py`);
+        tmpFile = join(tmpdir(), `nyteshift-exec-${id}.py`);
         cmd = `python3 "${tmpFile}"`;
         break;
       }
       case "node":
       case "javascript": {
-        tmpFile = join(tmpdir(), `solix-exec-${id}.mjs`);
+        tmpFile = join(tmpdir(), `nyteshift-exec-${id}.mjs`);
         cmd = `node "${tmpFile}"`;
         break;
       }
@@ -109,7 +109,7 @@ export default {
 };
 
 /**
- * Interface contract — consumed by the SolixAI runtime for call validation.
+ * Interface contract — consumed by the NyteShift runtime for call validation.
  * Schema format: JSON Schema draft-07.
  * @since 1.1.0
  */

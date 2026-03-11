@@ -169,7 +169,7 @@ export default {
 };
 
 /**
- * Interface contract — consumed by the SolixAI runtime for call validation.
+ * Interface contract — consumed by the NyteShift runtime for call validation.
  * Schema format: JSON Schema draft-07.
  * @since 1.1.0
  */

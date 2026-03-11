@@ -1,7 +1,7 @@
 ---
 name: git
 version: "1.0.0"
-contributor: solix
+contributor: nyteshift
 description: "Perform common Git repository operations: status, add, commit, branch, checkout, merge, push, pull, fetch, log, diff, stash, tag and safe resets."
 tags:
   - vcs
