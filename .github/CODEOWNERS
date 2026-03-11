@@ -1,3 +1,41 @@
+# CODEOWNERS for NyteShift Marketplace
+# Global owner: @jonjonbinx1
+#
+# Purpose:
+# - Makes @jonjonbinx1 the default owner for any file in the repository.
+# - Explains how contributors can add themselves as owners for subprojects.
+#
+# How to add yourself as a code owner for a specific project or folder:
+# 1) Edit this file and add a line with the path and your GitHub username,
+#    e.g. tools/gmail/ @your-github-username.
+# 2) Or create a CODEOWNERS file inside your subfolder (e.g. tools/gmail/CODEOWNERS)
+#    with entries that point to the files you maintain.
+# Notes:
+# - Use GitHub usernames (prefixed with @). Multiple owners are space-separated.
+# - Lines are evaluated top-to-bottom; more specific rules should go later.
+# - Valid CODEOWNERS locations: repository root, .github/CODEOWNERS, or docs/.
+#
+# Examples:
+#   # Give ownership of a specific tool to @alice:
+#   tools/gmail/ @alice
+#   # Give multiple owners for a folder:
+#   tools/widget/ @owner1 @owner2
+
+# Global owner (default for all files)
+* @jonjonbinx1
+
+# Keep key docs under core ownership
+/README.md @jonjonbinx1
+/package.json @jonjonbinx1
+
+# Contributor guidance (example entries):
+# - To claim ownership of a tool/folder, add one of these lines below or in
+#   the subfolder's own CODEOWNERS file. Replace tools/example/ and
+#   @github-user with the real path and username.
+#
+#   tools/example/ @github-user
+#
+# End of file
 # CODEOWNERS — assigns repository ownership and controls review requests
 # Format: <pattern> <owner>
 
