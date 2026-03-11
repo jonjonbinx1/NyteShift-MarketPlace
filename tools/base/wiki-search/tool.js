@@ -16,7 +16,7 @@ const SEARCH_API  = "https://en.wikipedia.org/w/api.php";
 const SUMMARY_API = "https://en.wikipedia.org/api/rest_v1/page/summary";
 
 const HEADERS = {
-  "User-Agent": "SolixAI/1.0 (https://solixai.dev; contact@solixai.dev)",
+  "User-Agent": "NyteShift/1.0 (https://nyteshift.dev; contact@nyteshift.dev)",
   Accept: "application/json",
 };
 
@@ -136,7 +136,7 @@ export default {
 };
 
 /**
- * Interface contract — consumed by the SolixAI runtime for call validation.
+ * Interface contract — consumed by the NyteShift runtime for call validation.
  * Schema format: JSON Schema draft-07.
  * @since 1.0.0
  */

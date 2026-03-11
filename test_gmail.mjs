@@ -1,4 +1,4 @@
-import tool from 'file:///c:/Users/johnb/Documents/SolixAI-Marketplace/tools/solix/gmail/tool.js';
+import tool from './tools/nyteshift/gmail/tool.js';
 
 (async ()=>{
   const result = await tool.run({

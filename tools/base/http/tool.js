@@ -22,8 +22,8 @@ export default {
       key: "userAgent",
       label: "User-Agent",
       type: "string",
-      default: "SolixAI/1.0",
-      placeholder: "SolixAI/1.0",
+      default: "NyteShift/1.0",
+      placeholder: "NyteShift/1.0",
       description: "User-Agent header sent with all requests.",
     },
     {
@@ -105,7 +105,7 @@ export default {
 };
 
 /**
- * Interface contract — consumed by the SolixAI runtime for call validation.
+ * Interface contract — consumed by the NyteShift runtime for call validation.
  * Schema format: JSON Schema draft-07.
  * @since 1.1.0
  */

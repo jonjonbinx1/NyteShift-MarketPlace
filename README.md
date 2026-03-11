@@ -1,15 +1,15 @@
-# SolixAI Marketplace
+# NyteShift Marketplace
 
-The official catalog of installable, versioned, contributor-organized extensions for the **SolixAI agentic platform**.
+The official catalog of installable, versioned, contributor-organized extensions for the **NyteShift agentic platform**.
 
-This repository contains **no runtime code** and **no platform internals**. Every item is atomic, self-contained, and loadable by SolixAI's extension system.
+This repository contains **no runtime code** and **no platform internals**. Every item is atomic, self-contained, and loadable by NyteShift's extension system.
 
 ---
 
 ## Repository Structure
 
 ```
-SolixAI-Marketplace/
+NyteShift-MarketPlace/
   README.md
 
   skills/
@@ -48,7 +48,7 @@ All folder names are **kebab-case** and must match the metadata fields inside ea
 
 ## The `base` Contributor Namespace
 
-The `base` namespace contains **first-party baseline capabilities** maintained by the SolixAI team. These are the default skills and tools every SolixAI agent has access to out of the box.
+The `base` namespace contains **first-party baseline capabilities** maintained by the NyteShift team. These are the default skills and tools every NyteShift agent has access to out of the box.
 
 ### Baseline Tools (`tools/base/`)
 
@@ -77,9 +77,9 @@ The `base` namespace contains **first-party baseline capabilities** maintained b
 
 ---
 
-## How SolixAI Installs Marketplace Items
+## How NyteShift Installs Marketplace Items
 
-1. **Discovery** — SolixAI scans this repository (or a configured registry) by category folder.
+1. **Discovery** — NyteShift scans this repository (or a configured registry) by category folder.
 2. **Resolution** — Each item's metadata (`name`, `version`, `contributor`) is read from its contract file.
 3. **Validation** — The item is validated against its category contract (frontmatter schema, export shape, JSON schema).
 4. **Installation** — The item is copied into the agent's local extension directory, namespaced by `<contributor>/<name>`.
@@ -110,18 +110,18 @@ The version field lives inside each item's metadata (frontmatter or export objec
 | Add output field | MINOR | Additive; old callers ignore it |
 | Add `verify` hint | MINOR | Additive |
 
-When making a MAJOR schema change, document the incompatibility in the PR description so runtime consumers (e.g. SolixAI core) can mirror the change.
+When making a MAJOR schema change, document the incompatibility in the PR description so runtime consumers (e.g. NyteShift core) can mirror the change.
 
 ### Backward compatibility
 
-The SolixAI runtime loads items that lack `inputs`/`outputs`/`spec` with a **deprecation warning**.  
+The NyteShift runtime loads items that lack `inputs`/`outputs`/`spec` with a **deprecation warning**.  
 Schema presence will be **enforced** in a future major release. Contributors are encouraged to annotate all items now.
 
 ---
 
 ## Interface Schemas
 
-As of **v1.1.0**, every marketplace item must ship explicit interface metadata so that any SolixAI runtime can validate and verify calls without executing the item.
+As of **v1.1.0**, every marketplace item must ship explicit interface metadata so that any NyteShift runtime can validate and verify calls without executing the item.
 
 > **This repository supplies the metadata. The runtime consumes it.**  
 > No validation logic lives here.
@@ -262,7 +262,7 @@ See the [Versioning](#versioning) section for the full compatibility matrix.
 - All folder names must be **kebab-case**.
 - All metadata fields must match their corresponding folder names exactly.
 - YAML frontmatter and JSON must be valid and parseable.
-- Tools must **not** import SolixAI platform internals.
+- Tools must **not** import NyteShift platform internals.
 - Tools may include an optional `package.json` for third-party dependencies.
 - Do **not** add runtime code, platform code, or example agents.
 - One item per folder. One contract file per item.
@@ -331,7 +331,7 @@ export default {
 }
 
 /**
- * Interface contract — consumed by the SolixAI runtime for call validation.
+ * Interface contract — consumed by the NyteShift runtime for call validation.
  * Schema format: JSON Schema draft-07.
  * Required as of v1.1.0.
  */

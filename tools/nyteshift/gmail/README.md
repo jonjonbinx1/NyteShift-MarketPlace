@@ -1,4 +1,4 @@
-# Gmail Tool — README
+# Gmail Tool — NyteShift README
 
 ## Overview
 
@@ -48,7 +48,7 @@ Integrates with Gmail via **IMAP** (reading) and **SMTP** (sending), authenticat
   "maxResults": 20,
   "defaultMailbox": "INBOX",
   "trashOnDelete": true,
-  "templateMailbox": "SolixTemplates"
+  "templateMailbox": "NyteShiftTemplates"
 }
 ```
 
@@ -101,5 +101,5 @@ Next steps (optional)
 - Add integration tests (mock Gmail responses) to exercise each action.
 
 File locations
-- Gmail tool implementation: [tools/solix/gmail/tool.js](tools/solix/gmail/tool.js)
-- Email skill: [skills/solix/email/skill.md](skills/solix/email/skill.md)
+- Gmail tool implementation: [tools/nyteshift/gmail/tool.js](tools/nyteshift/gmail/tool.js)
+- Email skill: [skills/nyteshift/email/skill.md](skills/nyteshift/email/skill.md)

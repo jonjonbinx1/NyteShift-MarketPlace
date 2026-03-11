@@ -1,23 +1,23 @@
 /**
- * Trello Tool — SolixAI Marketplace
- * Contributor: solix
+ * Trello Tool — NyteShift Marketplace
+ * Contributor: nyteshift
  *
  * Minimal Trello tool for listing and modifying boards, lists and cards.
- * Reads ~/.solix/config.json for API key/token under toolConfig['solix/trello']
+ * Reads ~/.nyteshift/config.json for API key/token under toolConfig['nyteshift/trello']
  */
 
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-function readSolixToolConfig() {
+function readNyteShiftToolConfig() {
   try {
-    const cfgPath = join(homedir(), '.solix', 'config.json');
+    const cfgPath = join(homedir(), '.nyteshift', 'config.json');
     const raw = readFileSync(cfgPath, 'utf-8');
     const parsed = JSON.parse(raw);
-    return parsed?.toolConfig?.['solix/trello'] ?? {};
+    return parsed?.toolConfig?.['nyteshift/trello'] ?? {};
   } catch (e) {
-    console.warn('[trello] could not read ~/.solix/config.json:', e.message);
+    console.warn('[trello] could not read ~/.nyteshift/config.json:', e.message);
     return {};
   }
 }
@@ -47,7 +47,7 @@ async function ensureClient(context = {}) {
     }
   } catch (_) {}
 
-  const cfg = readSolixToolConfig();
+  const cfg = readNyteShiftToolConfig();
   const key = cfg.apiKey ?? cfg.key ?? process.env.TRELLO_API_KEY;
   const token = cfg.token ?? process.env.TRELLO_TOKEN;
   if (key && token) return new RestTrelloClient(key, token, cfg.baseUrl);
@@ -95,7 +95,7 @@ class RestTrelloClient {
       opts.body = typeof body === 'string' ? body : JSON.stringify(body);
     }
     try {
-      if (typeof process !== 'undefined' && process.env && process.env.SOLIX_DEBUG_PROVIDER_RAW === '1') {
+      if (typeof process !== 'undefined' && process.env && process.env.NYTESHIFT_DEBUG_PROVIDER_RAW === '1') {
         const safeHeaders = Object.assign({}, headers);
         if (safeHeaders.Authorization) safeHeaders.Authorization = '<REDACTED>';
         let dbgBody = opts.body;
@@ -184,7 +184,7 @@ class RestTrelloClient {
 const toolImpl = {
   name: 'trello',
   version: '1.0.0',
-  contributor: 'solix',
+  contributor: 'nyteshift',
   description: 'Interact with Trello boards, lists, and cards.',
 
   config: [
@@ -193,14 +193,14 @@ const toolImpl = {
       label: 'API Key',
       type: 'string',
       placeholder: 'Trello API key',
-      description: 'Your Trello API key (can also be provided in ~/.solix/config.json or via env var TRELLO_API_KEY).',
+      description: 'Your Trello API key (can also be provided in ~/.nyteshift/config.json or via env var TRELLO_API_KEY).',
     },
     {
       key: 'token',
       label: 'Token',
       type: 'secret',
       placeholder: 'Trello token',
-      description: 'Trello API token (keep this private). Can also be provided in ~/.solix/config.json or via env var TRELLO_TOKEN.',
+      description: 'Trello API token (keep this private). Can also be provided in ~/.nyteshift/config.json or via env var TRELLO_TOKEN.',
     },
     {
       key: 'allowedOperations',
@@ -227,9 +227,9 @@ const toolImpl = {
   ],
 
   run: async ({ input, context }) => {
-    const fileCfg = readSolixToolConfig();
+    const fileCfg = readNyteShiftToolConfig();
 
-    const toolKey = 'solix/trello';
+    const toolKey = 'nyteshift/trello';
     const ctx = context ?? {};
     const candidates = [];
     if (ctx.toolConfig && ctx.toolConfig[toolKey]) candidates.push(ctx.toolConfig[toolKey]);
@@ -250,7 +250,7 @@ const toolImpl = {
     cfg.defaultList = cfg.defaultList ?? '';
 
     try {
-      if (typeof process !== 'undefined' && process.env && process.env.SOLIX_DEBUG_PROVIDER_RAW === '1') {
+      if (typeof process !== 'undefined' && process.env && process.env.NYTESHIFT_DEBUG_PROVIDER_RAW === '1') {
         try {
           console.debug('[trello] RAW TOOL INPUT:', JSON.stringify(input, null, 2));
         } catch (e) {

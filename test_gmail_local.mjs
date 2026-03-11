@@ -1,8 +1,8 @@
 // test_gmail_local.mjs
-// Test script for SolixAI Gmail tool (local IMAP search)
+// Test script for NyteShift Gmail tool (local IMAP search)
 // Usage: node --experimental-modules test_gmail_local.mjs
 
-import toolImpl from './tools/solix/gmail/tool.js';
+import toolImpl from './tools/nyteshift/gmail/tool.js';
 import { readFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
@@ -11,16 +11,16 @@ async function main() {
   // Read config to print which account is being used
   let email = '(unknown)';
   try {
-    const cfgPath = join(homedir(), '.solix', 'config.json');
+    const cfgPath = join(homedir(), '.nyteshift', 'config.json');
     const raw = readFileSync(cfgPath, 'utf-8');
     const parsed = JSON.parse(raw);
-    email = parsed?.toolConfig?.['solix/gmail']?.email || email;
+    email = parsed?.toolConfig?.['nyteshift/gmail']?.email || email;
   } catch (e) {
     // ignore
   }
   console.log('Using Gmail account:', email);
 
-  const context = { config: {} }; // Leave empty to use ~/.solix/config.json
+  const context = { config: {} }; // Leave empty to use ~/.nyteshift/config.json
 
   try {
     // Test 1: listMessages (sequence-based fetch — works like Thunderbird)

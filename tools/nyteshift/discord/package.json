@@ -1,8 +1,8 @@
 {
-  "name": "solix-discord",
+  "name": "nyteshift-discord",
   "version": "1.0.0",
   "main": "tool.js",
-  "description": "Solix Discord tool delegating to the Solix core Discord bridge",
-  "author": "solix",
+  "description": "NyteShift Discord tool delegating to the NyteShift core Discord bridge",
+  "author": "nyteshift",
   "license": "MIT"
 }

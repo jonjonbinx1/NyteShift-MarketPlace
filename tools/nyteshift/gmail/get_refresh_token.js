@@ -9,7 +9,7 @@
  * MODE 2 — full interactive flow (starts local server + opens browser):
  *   node get_refresh_token.js
  *
- * Credentials are read automatically from ~/.solix/config.json.
+ * Credentials are read automatically from ~/.nyteshift/config.json.
  * Override with --clientId and --clientSecret flags.
  */
 
@@ -37,11 +37,11 @@ function getArg(name) {
 // the READY signal; --no-open suppresses the duplicate browser launch here.
 const noOpen = args.includes('--no-open');
 
-// ── Auto-load solix config ────────────────────────────────────────────────────
-function loadSolixConfig() {
+// ── Auto-load nyteshift config ─────────────────────────────────────────────────
+function loadNyteShiftConfig() {
   try {
-    const raw = readFileSync(join(homedir(), '.solix', 'config.json'), 'utf-8');
-    return JSON.parse(raw)?.toolConfig?.['solix/gmail'] ?? {};
+    const raw = readFileSync(join(homedir(), '.nyteshift', 'config.json'), 'utf-8');
+    return JSON.parse(raw)?.toolConfig?.['nyteshift/gmail'] ?? {};
   } catch { return {}; }
 }
 
@@ -94,9 +94,9 @@ function openBrowser(url) {
 }
 
 async function main() {
-  const solixCfg = loadSolixConfig();
-  const presetClientId = getArg('clientId') ?? solixCfg.clientId ?? null;
-  const presetClientSecret = getArg('clientSecret') ?? solixCfg.clientSecret ?? null;
+  const nyteCfg = loadNyteShiftConfig();
+  const presetClientId = getArg('clientId') ?? nyteCfg.clientId ?? null;
+  const presetClientSecret = getArg('clientSecret') ?? nyteCfg.clientSecret ?? null;
   const existingCode = getArg('code');
   const portInput = getArg('port');
   const port = parseInt(portInput ?? '3000', 10);
@@ -106,7 +106,7 @@ async function main() {
   let actualPort = port;
   const servers = [];
 
-  const scopes = getArg('scopes') ?? solixCfg.scopes ??
+  const scopes = getArg('scopes') ?? nyteCfg.scopes ??
     'https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send';
 
   // ── MODE 1: code already in hand ─────────────────────────────────────────
@@ -114,7 +114,7 @@ async function main() {
     const clientId = presetClientId;
     const clientSecret = presetClientSecret;
     if (!clientId || !clientSecret) {
-      console.error('Could not find clientId/clientSecret in ~/.solix/config.json.');
+      console.error('Could not find clientId/clientSecret in ~/.nyteshift/config.json.');
       console.error('Pass them explicitly: --clientId ID --clientSecret SECRET');
       process.exit(1);
     }

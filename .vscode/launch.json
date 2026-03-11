@@ -2,10 +2,10 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "SolixAI UI",
+      "name": "NyteShift UI",
       "type": "node",
       "request": "launch",
-      "runtimeExecutable": "solix",
+      "runtimeExecutable": "nyteshift",
       "runtimeArgs": ["ui", "launch"],
       "console": "integratedTerminal",
       "internalConsoleOptions": "neverOpen"

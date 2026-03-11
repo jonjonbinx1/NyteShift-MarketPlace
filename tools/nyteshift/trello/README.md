@@ -1,6 +1,6 @@
-# Trello tool — Solix (SolixAI Marketplace)
+# Trello tool — NyteShift (NyteShift Marketplace)
 
-Minimal Trello integration tool used by Solix agents to read and modify boards, lists and cards.
+Minimal Trello integration tool used by NyteShift agents to read and modify boards, lists and cards.
 
 ## Features
 - List boards, lists, and cards
@@ -19,12 +19,12 @@ npm install node-fetch
 
 ## Configuration
 
-Preferred: add credentials to `~/.solix/config.json` under `toolConfig['solix/trello']`:
+Preferred: add credentials to `~/.nyteshift/config.json` under `toolConfig['nyteshift/trello']`:
 
 ```json
 {
   "toolConfig": {
-    "solix/trello": {
+    "nyteshift/trello": {
       "apiKey": "YOUR_API_KEY",
       "token": "YOUR_TOKEN",
       "defaultBoard": "<BOARD_ID>",
@@ -38,7 +38,7 @@ Preferred: add credentials to `~/.solix/config.json` under `toolConfig['solix/tr
 Alternatively set environment variables `TRELLO_API_KEY` and `TRELLO_TOKEN`, or pass credentials via the tool `context`:
 
 ```js
-const context = { toolConfig: { 'solix/trello': { apiKey: '...', token: '...' } } };
+const context = { toolConfig: { 'nyteshift/trello': { apiKey: '...', token: '...' } } };
 ```
 
 The Trello tool's settings UI also exposes `API Key` and `Token` fields so you can paste credentials directly into the tool configuration.
@@ -48,7 +48,7 @@ The Trello tool's settings UI also exposes `API Key` and `Token` fields so you c
 Import the tool and call `run({ input, context })`. Example (ESM):
 
 ```js
-import trello from '../../tools/solix/trello/tool.js';
+import trello from '../../tools/nyteshift/trello/tool.js';
 
 // list boards for the current user (uses configured creds)
 const res = await trello.run({ input: { action: 'listBoards' }, context: {} });
@@ -65,7 +65,7 @@ console.log(r2);
 You can also call `getTool()` if your loader expects that:
 
 ```js
-import { getTool } from '../../tools/solix/trello/tool.js';
+import { getTool } from '../../tools/nyteshift/trello/tool.js';
 const tool = getTool();
 await tool.run({ input: { action: 'getConfig' }, context: {} });
 ```
@@ -73,7 +73,7 @@ await tool.run({ input: { action: 'getConfig' }, context: {} });
 Quick test from shell (one-liner):
 
 ```bash
-node -e "import('./tools/solix/trello/tool.js').then(m=>m.default.run({input:{action:'getConfig'},context:{}}).then(r=>console.log(JSON.stringify(r,null,2))).catch(e=>console.error(e)))"
+node -e "import('./tools/nyteshift/trello/tool.js').then(m=>m.default.run({input:{action:'getConfig'},context:{}}).then(r=>console.log(JSON.stringify(r,null,2))).catch(e=>console.error(e)))"
 ```
 
 ## Notes
@@ -84,5 +84,5 @@ node -e "import('./tools/solix/trello/tool.js').then(m=>m.default.run({input:{ac
 - `getConfig`, `listBoards`, `getBoard`, `listLists`, `listCards`, `createCard`, `updateCard`, `moveCard`, `addComment`, `addAttachment`, `search`, `getMember`
 
 ## Next steps
-- Add tests/examples under `tools/solix/trello/examples` (optional)
+- Add tests/examples under `tools/nyteshift/trello/examples` (optional)
 - Add OAuth helper for per-user auth (optional)

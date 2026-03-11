@@ -1,6 +1,6 @@
-# Solix Discord Tool
+# NyteShift Discord Tool
 
-This tool provides minimal Discord send/read operations by delegating to the Solix core Discord bridge.
+This tool provides minimal Discord send/read operations by delegating to the NyteShift core Discord bridge.
 
 Important: this tool intentionally does not add or modify any package.json files. It relies on the bridge's configuration (global or agent-scoped) for bot tokens and permissions.
 
