@@ -302,19 +302,22 @@ const toolImpl = {
   // â”€â”€ run â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   run: async ({ input, context }) => {
-    const uiCfg   = context?.config ?? {};
+    // prefer runtime-provided config (context.config). Secrets are expected to
+    // be provided at runtime (e.g. a NyteShift secrets file injected into
+    // `context.config`). For backwards compatibility we still read the
+    // on-disk config for non-secret defaults, but runtime secrets take
+    // precedence and will not be sourced from disk.
+    const uiCfg = context?.config ?? {};
     const fileCfg = readNyteShiftToolConfig();
 
-    // Merge: file config as baseline; UI config on top.
-    // Never let UI overwrite credentials with an empty string.
-    const pick = (val, fallback) =>
-      (typeof val === 'string' && val.trim() !== '') ? val : fallback;
-
+    // Merge file config with UI/runtime config, but prefer runtime-provided
+    // secret fields when present.
     const cfg = { ...fileCfg, ...uiCfg };
-    cfg.email       = pick(uiCfg.email,       fileCfg.email);
-    cfg.appPassword = pick(uiCfg.appPassword, fileCfg.appPassword);
-    // Strip spaces from app password (Google allows spaces in the displayed value)
-    if (cfg.appPassword) cfg.appPassword = cfg.appPassword.replace(/\s+/g, '');
+    if (typeof uiCfg.email === 'string' && uiCfg.email.trim() !== '') cfg.email = uiCfg.email;
+    if (typeof uiCfg.appPassword === 'string' && uiCfg.appPassword.trim() !== '') cfg.appPassword = uiCfg.appPassword;
+
+    // Normalize appPassword (strip spaces, ensure string)
+    if (cfg.appPassword) cfg.appPassword = String(cfg.appPassword).replace(/\s+/g, '');
 
     if (!cfg.email || !cfg.appPassword) {
       return {

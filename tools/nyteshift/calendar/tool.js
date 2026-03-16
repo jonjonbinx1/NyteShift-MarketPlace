@@ -6,9 +6,12 @@
  * and defines input/output schemas used by the NyteShift UI.
  */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, promises as fsPromises } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import http from 'node:http';
+import { randomBytes, createHash } from 'node:crypto';
+import { exec } from 'node:child_process';
 
 function readNyteShiftToolConfig() {
   try {
@@ -19,6 +22,51 @@ function readNyteShiftToolConfig() {
   } catch (e) {
     return {};
   }
+}
+
+async function writeNyteShiftToolConfig(changes = {}) {
+  const cfgDir = join(homedir(), '.nyteshift');
+  const cfgPath = join(cfgDir, 'config.json');
+  try {
+    await fsPromises.mkdir(cfgDir, { recursive: true });
+  } catch (_) {}
+  let data = {};
+  try {
+    const raw = await fsPromises.readFile(cfgPath, 'utf8');
+    data = JSON.parse(raw || '{}');
+  } catch (_) { data = {}; }
+  if (!data.toolConfig || typeof data.toolConfig !== 'object') data.toolConfig = {};
+  const existing = data.toolConfig['nyteshift/calendar'] ?? {};
+  data.toolConfig['nyteshift/calendar'] = Object.assign({}, existing, changes);
+  await fsPromises.writeFile(cfgPath, JSON.stringify(data, null, 2), 'utf8');
+  return data.toolConfig['nyteshift/calendar'];
+}
+
+function openUrl(url) {
+  try {
+    const plat = process.platform;
+    if (plat === 'win32') {
+      exec(`start "" "${url.replace(/"/g, '\\"')}"`);
+    } else if (plat === 'darwin') {
+      exec(`open "${url.replace(/"/g, '\\"')}"`);
+    } else {
+      exec(`xdg-open "${url.replace(/"/g, '\\"')}"`);
+    }
+  } catch (e) {
+    console.warn('[calendar] could not open browser automatically:', e?.message ?? e);
+  }
+}
+
+function base64url(buffer) {
+  return buffer.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function generateCodeVerifier() {
+  return base64url(randomBytes(32));
+}
+
+function sha256ToBase64url(str) {
+  return base64url(createHash('sha256').update(str).digest());
 }
 
 function assertAllowed(config, operation) {
@@ -122,11 +170,27 @@ const toolImpl = {
     { key: 'googleClientSecret', label: 'Google Client Secret', type: 'secret' },
     { key: 'googleRedirectUri', label: 'Google Redirect URI', type: 'string' },
     { key: 'googleRefreshToken', label: 'Google Refresh Token', type: 'secret' },
+    {
+      key: 'authorize_google',
+      label: 'Authorize Google Calendar',
+      type: 'action',
+      actionLabel: 'Authorize',
+      actionConfirmText: 'Open browser and sign in to Google Calendar?',
+      actionCode: "// Opens a browser and completes OAuth (PKCE + localhost redirect). Tokens are saved to ~/.nyteshift/config.json"
+    },
 
     // Microsoft OAuth
     { key: 'microsoftClientId', label: 'Microsoft Client ID', type: 'string' },
     { key: 'microsoftClientSecret', label: 'Microsoft Client Secret', type: 'secret' },
     { key: 'microsoftTenantId', label: 'Microsoft Tenant ID', type: 'string', default: 'common' },
+    {
+      key: 'authorize_microsoft',
+      label: 'Authorize Microsoft/Outlook',
+      type: 'action',
+      actionLabel: 'Authorize',
+      actionConfirmText: 'Start device-code flow for Microsoft sign-in?',
+      actionCode: "// Starts device-code flow and opens the verification URL in the browser. Tokens are saved to ~/.nyteshift/config.json"
+    },
 
     // CalDAV / server
     { key: 'caldavBaseUrl', label: 'CalDAV Base URL', type: 'string' },
@@ -134,6 +198,21 @@ const toolImpl = {
     { key: 'allowedOperations', label: 'Allowed Operations', type: 'multiselect', options: ['read', 'write', 'auth'], default: ['read', 'write'], description: 'Allowed Calendar operations.' },
     { key: 'defaultCalendar', label: 'Default Calendar ID', type: 'string', default: '', description: 'Default calendar id when provider supports it.' },
   ],
+
+  configAction: async function (key) {
+    // Provide config-driven action buttons (e.g. Authorize Google / Microsoft)
+    try {
+      if (key === 'authorize_google') {
+        return await this.run({ input: { action: 'authorizeInteractive', provider: 'google' }, context: {} });
+      }
+      if (key === 'authorize_microsoft') {
+        return await this.run({ input: { action: 'authorizeInteractive', provider: 'microsoft' }, context: {} });
+      }
+      throw new Error('Unknown action');
+    } catch (err) {
+      return { ok: false, error: err?.message ?? String(err) };
+    }
+  },
 
   run: async ({ input, context }) => {
     const fileCfg = readNyteShiftToolConfig();
@@ -163,7 +242,11 @@ const toolImpl = {
     try {
       switch (action) {
         case 'getConfig': {
-          return { ok: true, fileCfg, uiCfg, cfg };
+          const providers = ['google', 'microsoft', 'caldav'];
+          const uiActions = [];
+          if (cfg.googleClientId || cfg.googleClientSecret) uiActions.push({ id: 'authorize_google', label: 'Authorize Google Calendar', action: { action: 'authorizeInteractive', provider: 'google' }, description: 'Click to sign in with Google and persist tokens.' });
+          if (cfg.microsoftClientId || cfg.microsoftClientSecret) uiActions.push({ id: 'authorize_microsoft', label: 'Authorize Microsoft/Outlook', action: { action: 'authorizeInteractive', provider: 'microsoft' }, description: 'Click to sign in with Microsoft (device-code if required).' });
+          return { ok: true, fileCfg, uiCfg, cfg, providers, uiActions };
         }
 
         case 'listProviders': {
@@ -194,6 +277,122 @@ const toolImpl = {
           const cb = (resp) => { deviceMessage = resp?.message ?? String(resp); if (typeof context?.sendLog === 'function') context.sendLog(deviceMessage); else console.log('[calendar deviceCode]', deviceMessage); };
           const result = await adapter.acquireTokenByDeviceCode(scopes, cb);
           return { ok: true, result, deviceMessage };
+        }
+
+        case 'authorizeInteractive': {
+          assertAllowed(cfg, 'auth');
+          const provider = input.provider ?? cfg.defaultProvider;
+          if (!provider) throw new Error('provider is required');
+          const client = await ensureClient(context, uiCfg, fileCfg);
+          const adapter = client.getAdapter(provider);
+
+          if (provider === 'google') {
+            const codeVerifier = generateCodeVerifier();
+            const codeChallenge = sha256ToBase64url(codeVerifier);
+
+            // start local server
+            const server = http.createServer();
+            await new Promise((resolve, reject) => {
+              server.listen(0, '127.0.0.1', () => resolve());
+              server.on('error', reject);
+            });
+            const addr = server.address();
+            const port = addr && addr.port ? addr.port : 0;
+            const redirectPath = '/nyteshift-calendar/callback';
+            const redirectUri = `http://127.0.0.1:${port}${redirectPath}`;
+
+            const clientId = adapter?.config?.clientId ?? cfg.googleClientId;
+            if (!clientId) throw new Error('Google client id is not configured');
+            const scopeArr = Array.isArray(input.scope) ? input.scope : (typeof input.scope === 'string' ? input.scope.split(' ') : ['https://www.googleapis.com/auth/calendar']);
+            const scope = scopeArr.join(' ');
+            const state = base64url(randomBytes(8));
+
+            const params = new URLSearchParams({
+              client_id: clientId,
+              redirect_uri: redirectUri,
+              response_type: 'code',
+              scope,
+              access_type: input.accessType ?? 'offline',
+              prompt: input.prompt ?? 'consent',
+              state,
+              code_challenge: codeChallenge,
+              code_challenge_method: 'S256',
+            });
+
+            const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+            openUrl(authUrl);
+
+            const tokens = await new Promise((resolve, reject) => {
+              const timeoutMs = Number(input.timeout ?? 120000);
+              const timer = setTimeout(() => { server.close(); reject(new Error('Timed out waiting for OAuth callback')); }, timeoutMs);
+
+              server.on('request', async (req, res) => {
+                try {
+                  const full = new URL(req.url, `http://127.0.0.1:${port}`);
+                  if (full.pathname !== redirectPath) { res.writeHead(404); res.end('Not found'); return; }
+                  const code = full.searchParams.get('code');
+                  const returnedState = full.searchParams.get('state');
+                  if (!code || returnedState !== state) {
+                    res.writeHead(400); res.end('Invalid response');
+                    clearTimeout(timer); server.close(); return reject(new Error('Invalid OAuth callback'));
+                  }
+
+                  res.writeHead(200, { 'Content-Type': 'text/html' });
+                  res.end('<html><body><h1>Authorization complete</h1><p>You may close this window.</p></body></html>');
+
+                  const tokenUrl = 'https://oauth2.googleapis.com/token';
+                  const bodyParams = new URLSearchParams();
+                  bodyParams.append('client_id', clientId);
+                  const clientSecret = adapter?.config?.clientSecret ?? cfg.googleClientSecret;
+                  if (clientSecret) bodyParams.append('client_secret', clientSecret);
+                  bodyParams.append('code', code);
+                  bodyParams.append('code_verifier', codeVerifier);
+                  bodyParams.append('grant_type', 'authorization_code');
+                  bodyParams.append('redirect_uri', redirectUri);
+
+                  let fetchFn = (typeof fetch === 'function') ? fetch : null;
+                  if (!fetchFn) {
+                    try { const mod = await import('node-fetch'); fetchFn = mod.default ?? mod; } catch (e) { }
+                  }
+                  if (!fetchFn) throw new Error('No fetch available to exchange token');
+
+                  const tokenRes = await fetchFn(tokenUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: bodyParams.toString() });
+                  const tokenBody = await tokenRes.json().catch(() => ({}));
+                  if (!tokenRes.ok) { clearTimeout(timer); server.close(); return reject(new Error(tokenBody.error_description || tokenBody.error || JSON.stringify(tokenBody))); }
+
+                  try {
+                    if (typeof adapter.setCredentials === 'function') {
+                      await adapter.setCredentials({ access_token: tokenBody.access_token, refresh_token: tokenBody.refresh_token, id_token: tokenBody.id_token, expiry_date: Date.now() + (Number(tokenBody.expires_in || 3600) * 1000) });
+                    }
+                  } catch (_) {}
+                  try { await writeNyteShiftToolConfig({ googleAccessToken: tokenBody.access_token, googleRefreshToken: tokenBody.refresh_token, googleAccessTokenExpiry: Date.now() + (Number(tokenBody.expires_in || 3600) * 1000) }); } catch (_) {}
+
+                  clearTimeout(timer); server.close(); return resolve(tokenBody);
+                } catch (err) {
+                  clearTimeout(timer); server.close(); return reject(err);
+                }
+              });
+            });
+
+            return { ok: true, tokens };
+          }
+
+          if (provider === 'microsoft') {
+            if (!adapter || typeof adapter.acquireTokenByDeviceCode !== 'function') throw new Error('Adapter does not support device code interactive');
+            let deviceMsg = null;
+            const cb = (resp) => {
+              deviceMsg = resp?.message ?? String(resp);
+              if (resp?.verification_uri_complete) openUrl(resp.verification_uri_complete);
+              else if (resp?.verification_uri) openUrl(resp.verification_uri);
+              if (typeof context?.sendLog === 'function') context.sendLog(deviceMsg); else console.log('[calendar deviceCode]', deviceMsg);
+            };
+            const scopes = input.scope ?? ['https://graph.microsoft.com/.default'];
+            const result = await adapter.acquireTokenByDeviceCode(scopes, cb);
+            try { await writeNyteShiftToolConfig({ microsoftAccessToken: result?.accessToken ?? result?.access_token, microsoftRefreshToken: result?.refreshToken ?? result?.refresh_token }); } catch (_) {}
+            return { ok: true, result, deviceMessage: deviceMsg };
+          }
+
+          return { ok: false, error: 'Interactive authorize not implemented for provider' };
         }
 
         case 'authorize': {
@@ -290,7 +489,7 @@ const toolImpl = {
         }
 
         default:
-          return { ok: false, error: `Unknown action "${action}". Supported actions: getConfig, listProviders, generateAuthUrl, deviceCode, authorize, setCredentials, refreshToken, listCalendars, listEvents, createEvent, updateEvent, deleteEvent` };
+          return { ok: false, error: `Unknown action "${action}". Supported actions: getConfig, listProviders, generateAuthUrl, deviceCode, authorize, authorizeInteractive, setCredentials, refreshToken, listCalendars, listEvents, createEvent, updateEvent, deleteEvent` };
       }
     } catch (err) {
       return { ok: false, error: err?.message ?? String(err) };
@@ -306,7 +505,7 @@ export const spec = {
     type: 'object',
     required: ['action'],
     properties: {
-      action: { type: 'string', enum: ['getConfig','listProviders','generateAuthUrl','deviceCode','authorize','setCredentials','refreshToken','listCalendars','listEvents','createEvent','updateEvent','deleteEvent'] },
+      action: { type: 'string', enum: ['getConfig','listProviders','generateAuthUrl','deviceCode','authorize','authorizeInteractive','setCredentials','refreshToken','listCalendars','listEvents','createEvent','updateEvent','deleteEvent'] },
       provider: { type: 'string', enum: ['google','microsoft','caldav'] },
 
       // OAuth / auth
