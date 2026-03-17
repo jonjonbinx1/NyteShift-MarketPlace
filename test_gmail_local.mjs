@@ -20,7 +20,11 @@ async function main() {
   }
   console.log('Using Gmail account:', email);
 
-  const context = { config: {} }; // Leave empty to use ~/.nyteshift/config.json
+  // Prefer environment-provided secrets when running locally for quick tests
+  const envCfg = {};
+  if (process.env.NYTESHIFT_GMAIL_EMAIL) envCfg.email = process.env.NYTESHIFT_GMAIL_EMAIL;
+  if (process.env.NYTESHIFT_GMAIL_APPPASSWORD) envCfg.appPassword = process.env.NYTESHIFT_GMAIL_APPPASSWORD;
+  const context = Object.keys(envCfg).length ? { toolConfig: { ['nyteshift/gmail']: envCfg } } : { config: {} };
 
   try {
     // Test 1: listMessages (sequence-based fetch — works like Thunderbird)

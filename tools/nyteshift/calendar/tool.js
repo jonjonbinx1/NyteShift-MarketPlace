@@ -42,6 +42,48 @@ async function writeNyteShiftToolConfig(changes = {}) {
   return data.toolConfig['nyteshift/calendar'];
 }
 
+/**
+ * Runtime secret helpers: prefer runtime secret API (context.getSecret/context.setSecret)
+ * but fall back to storage APIs or on-disk config when unavailable.
+ */
+async function getToolSecret(context = {}, toolKey, name) {
+  const ctx = context ?? {};
+  try {
+    if (typeof ctx.getSecret === 'function') {
+      try { const v = await ctx.getSecret(toolKey, name); if (v != null) return v; } catch (_) {}
+      try { const v = await ctx.getSecret(`${toolKey}.${name}`); if (v != null) return v; } catch (_) {}
+      try { const v = await ctx.getSecret(name); if (v != null) return v; } catch (_) {}
+    }
+    if (ctx.secrets && typeof ctx.secrets.get === 'function') {
+      try { const v = await ctx.secrets.get(toolKey, name); if (v != null) return v; } catch (_) {}
+      try { const v = await ctx.secrets.get(`${toolKey}.${name}`); if (v != null) return v; } catch (_) {}
+    }
+    if (ctx.storage && typeof ctx.storage.get === 'function') {
+      try { const v = await ctx.storage.get(`${toolKey}.${name}`); if (v != null) return v; } catch (_) {}
+    }
+  } catch (_) {}
+  return undefined;
+}
+
+async function setToolSecret(context = {}, toolKey, name, value) {
+  const ctx = context ?? {};
+  try {
+    if (typeof ctx.setSecret === 'function') {
+      try { await ctx.setSecret(toolKey, name, value); return true; } catch (_) {}
+      try { await ctx.setSecret(`${toolKey}.${name}`, value); return true; } catch (_) {}
+      try { await ctx.setSecret(name, value); return true; } catch (_) {}
+    }
+    if (ctx.secrets && typeof ctx.secrets.set === 'function') {
+      try { await ctx.secrets.set(toolKey, name, value); return true; } catch (_) {}
+      try { await ctx.secrets.set(`${toolKey}.${name}`, value); return true; } catch (_) {}
+    }
+    if (ctx.storage && typeof ctx.storage.set === 'function') {
+      try { await ctx.storage.set(`${toolKey}.${name}`, value); return true; } catch (_) {}
+    }
+  } catch (_) {}
+  return false;
+}
+
 function openUrl(url) {
   try {
     const plat = process.platform;
@@ -274,8 +316,8 @@ const toolImpl = {
           if (!adapter || typeof adapter.acquireTokenByDeviceCode !== 'function') throw new Error('Adapter does not support device code flow');
           const scopes = input.scope ?? ['https://graph.microsoft.com/.default'];
           let deviceMessage = null;
-          const cb = (resp) => { deviceMessage = resp?.message ?? String(resp); if (typeof context?.sendLog === 'function') context.sendLog(deviceMessage); else console.log('[calendar deviceCode]', deviceMessage); };
-          const result = await adapter.acquireTokenByDeviceCode(scopes, cb);
+        refreshToken: uiCfg.googleRefreshToken ?? fileCfg.googleRefreshToken ?? fileCfg.refreshToken,
+        accessToken: uiCfg.googleAccessToken ?? fileCfg.googleAccessToken,
           return { ok: true, result, deviceMessage };
         }
 
@@ -283,9 +325,31 @@ const toolImpl = {
           assertAllowed(cfg, 'auth');
           const provider = input.provider ?? cfg.defaultProvider;
           if (!provider) throw new Error('provider is required');
-          const client = await ensureClient(context, uiCfg, fileCfg);
-          const adapter = client.getAdapter(provider);
+        refreshToken: uiCfg.microsoftRefreshToken ?? fileCfg.microsoftRefreshToken,
+        accessToken: uiCfg.microsoftAccessToken ?? fileCfg.microsoftAccessToken,
 
+
+      // Prefer runtime secrets via NyteShift secret API (context.getSecret / context.storage etc.)
+      try {
+        const toolKey = 'nyteshift/calendar';
+        const runtimeGoogleRefresh = await getToolSecret(ctx, toolKey, 'googleRefreshToken')
+          ?? await getToolSecret(ctx, toolKey, 'google.refreshToken')
+          ?? await getToolSecret(ctx, toolKey, 'refreshToken');
+        if (runtimeGoogleRefresh) googleCfg.refreshToken = runtimeGoogleRefresh;
+
+        const runtimeGoogleAccess = await getToolSecret(ctx, toolKey, 'googleAccessToken')
+          ?? await getToolSecret(ctx, toolKey, 'google.accessToken')
+          ?? await getToolSecret(ctx, toolKey, 'accessToken');
+        if (runtimeGoogleAccess) googleCfg.accessToken = runtimeGoogleAccess;
+
+        const runtimeMsRefresh = await getToolSecret(ctx, toolKey, 'microsoftRefreshToken')
+          ?? await getToolSecret(ctx, toolKey, 'microsoft.refreshToken');
+        if (runtimeMsRefresh) msCfg.refreshToken = runtimeMsRefresh;
+
+        const runtimeMsAccess = await getToolSecret(ctx, toolKey, 'microsoftAccessToken')
+          ?? await getToolSecret(ctx, toolKey, 'microsoft.accessToken');
+        if (runtimeMsAccess) msCfg.accessToken = runtimeMsAccess;
+      } catch (_) {}
           if (provider === 'google') {
             const codeVerifier = generateCodeVerifier();
             const codeChallenge = sha256ToBase64url(codeVerifier);
@@ -365,7 +429,16 @@ const toolImpl = {
                       await adapter.setCredentials({ access_token: tokenBody.access_token, refresh_token: tokenBody.refresh_token, id_token: tokenBody.id_token, expiry_date: Date.now() + (Number(tokenBody.expires_in || 3600) * 1000) });
                     }
                   } catch (_) {}
-                  try { await writeNyteShiftToolConfig({ googleAccessToken: tokenBody.access_token, googleRefreshToken: tokenBody.refresh_token, googleAccessTokenExpiry: Date.now() + (Number(tokenBody.expires_in || 3600) * 1000) }); } catch (_) {}
+                  try {
+                    const toolKey = 'nyteshift/calendar';
+                    const savedRefresh = await setToolSecret(context, toolKey, 'googleRefreshToken', tokenBody.refresh_token).catch(() => false);
+                    try { await setToolSecret(context, toolKey, 'googleAccessToken', tokenBody.access_token).catch(() => false); } catch (_) {}
+                    const expiry = Date.now() + (Number(tokenBody.expires_in || 3600) * 1000);
+                    try { await setToolSecret(context, toolKey, 'googleAccessTokenExpiry', String(expiry)).catch(() => false); } catch (_) {}
+                    if (!savedRefresh) {
+                      await writeNyteShiftToolConfig({ googleAccessToken: tokenBody.access_token, googleRefreshToken: tokenBody.refresh_token, googleAccessTokenExpiry: expiry });
+                    }
+                  } catch (_) {}
 
                   clearTimeout(timer); server.close(); return resolve(tokenBody);
                 } catch (err) {
@@ -388,7 +461,14 @@ const toolImpl = {
             };
             const scopes = input.scope ?? ['https://graph.microsoft.com/.default'];
             const result = await adapter.acquireTokenByDeviceCode(scopes, cb);
-            try { await writeNyteShiftToolConfig({ microsoftAccessToken: result?.accessToken ?? result?.access_token, microsoftRefreshToken: result?.refreshToken ?? result?.refresh_token }); } catch (_) {}
+            try {
+              const toolKey = 'nyteshift/calendar';
+              const saved = await setToolSecret(context, toolKey, 'microsoftRefreshToken', result?.refreshToken ?? result?.refresh_token).catch(() => false);
+              try { await setToolSecret(context, toolKey, 'microsoftAccessToken', result?.accessToken ?? result?.access_token).catch(() => false); } catch (_) {}
+              if (!saved) {
+                await writeNyteShiftToolConfig({ microsoftAccessToken: result?.accessToken ?? result?.access_token, microsoftRefreshToken: result?.refreshToken ?? result?.refresh_token });
+              }
+            } catch (_) {}
             return { ok: true, result, deviceMessage: deviceMsg };
           }
 

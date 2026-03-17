@@ -18,6 +18,44 @@ function readNyteShiftToolConfig() {
   }
 }
 
+async function getToolSecret(context = {}, toolKey, name) {
+  const ctx = context ?? {};
+  try {
+    if (typeof ctx.getSecret === 'function') {
+      try { const v = await ctx.getSecret(toolKey, name); if (v != null) return v; } catch (_) {}
+      try { const v = await ctx.getSecret(`${toolKey}.${name}`); if (v != null) return v; } catch (_) {}
+      try { const v = await ctx.getSecret(name); if (v != null) return v; } catch (_) {}
+    }
+    if (ctx.secrets && typeof ctx.secrets.get === 'function') {
+      try { const v = await ctx.secrets.get(toolKey, name); if (v != null) return v; } catch (_) {}
+      try { const v = await ctx.secrets.get(`${toolKey}.${name}`); if (v != null) return v; } catch (_) {}
+    }
+    if (ctx.storage && typeof ctx.storage.get === 'function') {
+      try { const v = await ctx.storage.get(`${toolKey}.${name}`); if (v != null) return v; } catch (_) {}
+    }
+  } catch (_) {}
+  return undefined;
+}
+
+async function setToolSecret(context = {}, toolKey, name, value) {
+  const ctx = context ?? {};
+  try {
+    if (typeof ctx.setSecret === 'function') {
+      try { await ctx.setSecret(toolKey, name, value); return true; } catch (_) {}
+      try { await ctx.setSecret(`${toolKey}.${name}`, value); return true; } catch (_) {}
+      try { await ctx.setSecret(name, value); return true; } catch (_) {}
+    }
+    if (ctx.secrets && typeof ctx.secrets.set === 'function') {
+      try { await ctx.secrets.set(toolKey, name, value); return true; } catch (_) {}
+      try { await ctx.secrets.set(`${toolKey}.${name}`, value); return true; } catch (_) {}
+    }
+    if (ctx.storage && typeof ctx.storage.set === 'function') {
+      try { await ctx.storage.set(`${toolKey}.${name}`, value); return true; } catch (_) {}
+    }
+  } catch (_) {}
+  return false;
+}
+
 /** Guard: ensure operation is allowed */
 function assertAllowed(config, operation) {
   const allowed = config?.allowedOperations ?? [];
@@ -251,9 +289,38 @@ const toolImpl = {
   ],
 
   run: async ({ input, context }) => {
-    const uiCfg = context?.config ?? {};
+    const ctx = context ?? {};
+    const uiCfg = ctx?.config ?? {};
     const fileCfg = readNyteShiftToolConfig();
     const cfg = { ...fileCfg, ...uiCfg };
+
+    // Prefer runtime-provided secrets (if the host exposes them on `context`).
+    try {
+      const toolKey = 'nyteshift/email';
+      const runtimePassword = await getToolSecret(ctx, toolKey, 'password') ?? await getToolSecret(ctx, toolKey, 'emailPassword') ?? await getToolSecret(ctx, toolKey, 'email.password');
+      if (runtimePassword) cfg.password = String(runtimePassword);
+
+      const runtimeEmail = await getToolSecret(ctx, toolKey, 'email');
+      if (typeof runtimeEmail === 'string' && runtimeEmail.trim() !== '') cfg.email = runtimeEmail;
+
+      const runtimeOauthRefresh = await getToolSecret(ctx, toolKey, 'oauthRefreshToken') ?? await getToolSecret(ctx, toolKey, 'oauth.refreshToken') ?? await getToolSecret(ctx, toolKey, 'oauthRefresh');
+      if (runtimeOauthRefresh) {
+        if (!cfg.oauth || typeof cfg.oauth !== 'object') cfg.oauth = {};
+        cfg.oauth.refreshToken = runtimeOauthRefresh;
+      }
+
+      const runtimeOauthAccess = await getToolSecret(ctx, toolKey, 'oauthAccessToken') ?? await getToolSecret(ctx, toolKey, 'oauth.accessToken');
+      if (runtimeOauthAccess) {
+        if (!cfg.oauth || typeof cfg.oauth !== 'object') cfg.oauth = {};
+        cfg.oauth.accessToken = runtimeOauthAccess;
+      }
+
+      const runtimeOauthClientSecret = await getToolSecret(ctx, toolKey, 'oauthClientSecret') ?? await getToolSecret(ctx, toolKey, 'oauth.clientSecret');
+      if (runtimeOauthClientSecret) {
+        if (!cfg.oauth || typeof cfg.oauth !== 'object') cfg.oauth = {};
+        cfg.oauth.clientSecret = runtimeOauthClientSecret;
+      }
+    } catch (_) {}
 
     // Accept either a password/app-password OR OAuth credentials (access/refresh token).
     const oauthResolved = resolveOAuth(cfg);

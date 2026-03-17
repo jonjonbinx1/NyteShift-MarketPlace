@@ -58,7 +58,7 @@
 
 // â”€â”€â”€ static imports (Node built-ins only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-import { readFileSync } from "node:fs";
+import { readFileSync, promises as fsPromises } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -75,6 +75,57 @@ function readNyteShiftToolConfig() {
     console.warn('[gmail] could not read ~/.nyteshift/config.json:', e.message);
     return {};
   }
+}
+
+async function writeNyteShiftToolConfig(changes = {}) {
+  const cfgDir = join(homedir(), '.nyteshift');
+  const cfgPath = join(cfgDir, 'config.json');
+  try { await fsPromises.mkdir(cfgDir, { recursive: true }); } catch (_) {}
+  let data = {};
+  try { const raw = await fsPromises.readFile(cfgPath, 'utf8'); data = JSON.parse(raw || '{}'); } catch (_) { data = {}; }
+  if (!data.toolConfig || typeof data.toolConfig !== 'object') data.toolConfig = {};
+  const existing = data.toolConfig['nyteshift/gmail'] ?? {};
+  data.toolConfig['nyteshift/gmail'] = Object.assign({}, existing, changes);
+  await fsPromises.writeFile(cfgPath, JSON.stringify(data, null, 2), 'utf8');
+  return data.toolConfig['nyteshift/gmail'];
+}
+
+async function getToolSecret(context = {}, toolKey, name) {
+  const ctx = context ?? {};
+  try {
+    if (typeof ctx.getSecret === 'function') {
+      try { const v = await ctx.getSecret(toolKey, name); if (v != null) return v; } catch (_) {}
+      try { const v = await ctx.getSecret(`${toolKey}.${name}`); if (v != null) return v; } catch (_) {}
+      try { const v = await ctx.getSecret(name); if (v != null) return v; } catch (_) {}
+    }
+    if (ctx.secrets && typeof ctx.secrets.get === 'function') {
+      try { const v = await ctx.secrets.get(toolKey, name); if (v != null) return v; } catch (_) {}
+      try { const v = await ctx.secrets.get(`${toolKey}.${name}`); if (v != null) return v; } catch (_) {}
+    }
+    if (ctx.storage && typeof ctx.storage.get === 'function') {
+      try { const v = await ctx.storage.get(`${toolKey}.${name}`); if (v != null) return v; } catch (_) {}
+    }
+  } catch (_) {}
+  return undefined;
+}
+
+async function setToolSecret(context = {}, toolKey, name, value) {
+  const ctx = context ?? {};
+  try {
+    if (typeof ctx.setSecret === 'function') {
+      try { await ctx.setSecret(toolKey, name, value); return true; } catch (_) {}
+      try { await ctx.setSecret(`${toolKey}.${name}`, value); return true; } catch (_) {}
+      try { await ctx.setSecret(name, value); return true; } catch (_) {}
+    }
+    if (ctx.secrets && typeof ctx.secrets.set === 'function') {
+      try { await ctx.secrets.set(toolKey, name, value); return true; } catch (_) {}
+      try { await ctx.secrets.set(`${toolKey}.${name}`, value); return true; } catch (_) {}
+    }
+    if (ctx.storage && typeof ctx.storage.set === 'function') {
+      try { await ctx.storage.set(`${toolKey}.${name}`, value); return true; } catch (_) {}
+    }
+  } catch (_) {}
+  return false;
 }
 
 /** Guard: throw if the requested operation is not in allowedOperations. */
@@ -326,7 +377,22 @@ const toolImpl = {
     // Normalize appPassword (strip spaces, ensure string)
     if (cfg.appPassword) cfg.appPassword = String(cfg.appPassword).replace(/\s+/g, '');
 
-    if (!cfg.email || !cfg.appPassword) {
+    // Allow credential-setting action even when no creds yet.
+    const action = input?.action;
+
+    // Try runtime secret store for appPassword / refresh token / email overrides
+    try {
+      const runtimeAppPassword = await getToolSecret(ctx, toolKey, 'appPassword') ?? await getToolSecret(ctx, toolKey, 'gmailAppPassword') ?? await getToolSecret(ctx, toolKey, 'gmail.appPassword');
+      if (typeof runtimeAppPassword === 'string' && runtimeAppPassword.trim() !== '') cfg.appPassword = String(runtimeAppPassword).replace(/\s+/g, '');
+
+      const runtimeRefresh = await getToolSecret(ctx, toolKey, 'refreshToken') ?? await getToolSecret(ctx, toolKey, 'gmailRefreshToken') ?? await getToolSecret(ctx, toolKey, 'googleRefreshToken');
+      if (runtimeRefresh) cfg.refreshToken = runtimeRefresh;
+
+      const runtimeEmail = await getToolSecret(ctx, toolKey, 'email') ?? await getToolSecret(ctx, toolKey, 'gmailEmail');
+      if (typeof runtimeEmail === 'string' && runtimeEmail.trim() !== '') cfg.email = runtimeEmail;
+    } catch (_) {}
+
+    if ((!cfg.email || !cfg.appPassword) && action !== 'setCredentials') {
       return {
         ok: false,
         error:
@@ -335,7 +401,6 @@ const toolImpl = {
       };
     }
 
-    const { action } = input;
     // Default per-request page size (config key `limit`). Cap at 200.
     const maxLimit = 200;
     const defaultLimit = Math.min(Number(cfg.limit ?? 20) || 20, maxLimit);
@@ -781,6 +846,23 @@ const toolImpl = {
           });
         }
 
+        case "setCredentials": {
+          // Save credentials to the runtime secret store (preferred) or fall back to disk config.
+          const toolKey = 'nyteshift/gmail';
+          const savedApp = input.appPassword ? await setToolSecret(ctx, toolKey, 'appPassword', input.appPassword).catch(() => false) : false;
+          const savedRefresh = input.refreshToken ? await setToolSecret(ctx, toolKey, 'refreshToken', input.refreshToken).catch(() => false) : false;
+          try {
+            if (!savedApp && input.appPassword) await writeNyteShiftToolConfig({ appPassword: input.appPassword });
+          } catch (_) {}
+          try {
+            if (!savedRefresh && input.refreshToken) await writeNyteShiftToolConfig({ refreshToken: input.refreshToken });
+          } catch (_) {}
+          try {
+            if (input.email) await writeNyteShiftToolConfig({ email: input.email });
+          } catch (_) {}
+          return { ok: true, savedApp: !!savedApp, savedRefresh: !!savedRefresh };
+        }
+
         default:
           return {
             ok:    false,
@@ -818,6 +900,7 @@ export const spec = {
           "deleteMessage",
           "createTemplate",
           "listTemplates",
+          "setCredentials",
           "markRead",
           "markUnread",
         ],
@@ -879,6 +962,9 @@ export const spec = {
         type: "string",
         description: "Recipient email address(es). Required for sendMessage and createDraft; optional for replyMessage (defaults to original sender).",
       },
+      appPassword: { type: "string", description: "App password or secret (16-character Gmail App Password)." },
+      refreshToken: { type: "string", description: "Optional OAuth refresh token (if using OAuth2-based auth)." },
+      email: { type: "string", description: "Optional email address to set when using setCredentials action." },
       cc:      { type: "string", description: "CC recipients." },
       bcc:     { type: "string", description: "BCC recipients." },
       subject: {
@@ -904,6 +990,8 @@ export const spec = {
     properties: {
       ok:       { type: "boolean" },
       error:    { type: "string", description: "Present when ok=false." },
+      savedApp: { type: "boolean" },
+      savedRefresh: { type: "boolean" },
 
       // listMessages / searchMessages
       total:    { type: "number" },

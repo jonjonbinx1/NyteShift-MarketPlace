@@ -22,6 +22,44 @@ function readNyteShiftToolConfig() {
   }
 }
 
+async function getToolSecret(context = {}, toolKey, name) {
+  const ctx = context ?? {};
+  try {
+    if (typeof ctx.getSecret === 'function') {
+      try { const v = await ctx.getSecret(toolKey, name); if (v != null) return v; } catch (_) {}
+      try { const v = await ctx.getSecret(`${toolKey}.${name}`); if (v != null) return v; } catch (_) {}
+      try { const v = await ctx.getSecret(name); if (v != null) return v; } catch (_) {}
+    }
+    if (ctx.secrets && typeof ctx.secrets.get === 'function') {
+      try { const v = await ctx.secrets.get(toolKey, name); if (v != null) return v; } catch (_) {}
+      try { const v = await ctx.secrets.get(`${toolKey}.${name}`); if (v != null) return v; } catch (_) {}
+    }
+    if (ctx.storage && typeof ctx.storage.get === 'function') {
+      try { const v = await ctx.storage.get(`${toolKey}.${name}`); if (v != null) return v; } catch (_) {}
+    }
+  } catch (_) {}
+  return undefined;
+}
+
+async function setToolSecret(context = {}, toolKey, name, value) {
+  const ctx = context ?? {};
+  try {
+    if (typeof ctx.setSecret === 'function') {
+      try { await ctx.setSecret(toolKey, name, value); return true; } catch (_) {}
+      try { await ctx.setSecret(`${toolKey}.${name}`, value); return true; } catch (_) {}
+      try { await ctx.setSecret(name, value); return true; } catch (_) {}
+    }
+    if (ctx.secrets && typeof ctx.secrets.set === 'function') {
+      try { await ctx.secrets.set(toolKey, name, value); return true; } catch (_) {}
+      try { await ctx.secrets.set(`${toolKey}.${name}`, value); return true; } catch (_) {}
+    }
+    if (ctx.storage && typeof ctx.storage.set === 'function') {
+      try { await ctx.storage.set(`${toolKey}.${name}`, value); return true; } catch (_) {}
+    }
+  } catch (_) {}
+  return false;
+}
+
 function assertAllowed(config, operation) {
   const allowed = config?.allowedOperations ?? [];
   if (!allowed.includes(operation)) {
@@ -62,6 +100,13 @@ async function ensureBridge(context = {}) {
   } catch (_) {}
   // Fallback: try reading global Discord config (prefer injected helper if available)
   try {
+    // Prefer runtime-provided secrets for global Discord bot token when available
+    try {
+      const rtBot = await getToolSecret(ctx, 'globalDiscord', 'botToken') ?? await getToolSecret(ctx, 'nyteshift/discord', 'botToken') ?? await getToolSecret(ctx, 'nyteshift/discord', 'token') ?? await getToolSecret(ctx, 'globalDiscord', 'token');
+      const rtGuild = await getToolSecret(ctx, 'globalDiscord', 'guildId') ?? await getToolSecret(ctx, 'nyteshift/discord', 'guildId');
+      const rtBase = await getToolSecret(ctx, 'globalDiscord', 'baseUrl') ?? await getToolSecret(ctx, 'nyteshift/discord', 'baseUrl');
+      if (rtBot) return new RestDiscordBridge(rtBot, rtGuild, rtBase);
+    } catch (_) {}
     let globalCfg = null;
     if (typeof ctx.readGlobalDiscordConfig === 'function') {
       try { globalCfg = await ctx.readGlobalDiscordConfig(); } catch (_) { globalCfg = null; }

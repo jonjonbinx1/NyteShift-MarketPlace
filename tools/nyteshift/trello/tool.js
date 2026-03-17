@@ -22,6 +22,44 @@ function readNyteShiftToolConfig() {
   }
 }
 
+async function getToolSecret(context = {}, toolKey, name) {
+  const ctx = context ?? {};
+  try {
+    if (typeof ctx.getSecret === 'function') {
+      try { const v = await ctx.getSecret(toolKey, name); if (v != null) return v; } catch (_) {}
+      try { const v = await ctx.getSecret(`${toolKey}.${name}`); if (v != null) return v; } catch (_) {}
+      try { const v = await ctx.getSecret(name); if (v != null) return v; } catch (_) {}
+    }
+    if (ctx.secrets && typeof ctx.secrets.get === 'function') {
+      try { const v = await ctx.secrets.get(toolKey, name); if (v != null) return v; } catch (_) {}
+      try { const v = await ctx.secrets.get(`${toolKey}.${name}`); if (v != null) return v; } catch (_) {}
+    }
+    if (ctx.storage && typeof ctx.storage.get === 'function') {
+      try { const v = await ctx.storage.get(`${toolKey}.${name}`); if (v != null) return v; } catch (_) {}
+    }
+  } catch (_) {}
+  return undefined;
+}
+
+async function setToolSecret(context = {}, toolKey, name, value) {
+  const ctx = context ?? {};
+  try {
+    if (typeof ctx.setSecret === 'function') {
+      try { await ctx.setSecret(toolKey, name, value); return true; } catch (_) {}
+      try { await ctx.setSecret(`${toolKey}.${name}`, value); return true; } catch (_) {}
+      try { await ctx.setSecret(name, value); return true; } catch (_) {}
+    }
+    if (ctx.secrets && typeof ctx.secrets.set === 'function') {
+      try { await ctx.secrets.set(toolKey, name, value); return true; } catch (_) {}
+      try { await ctx.secrets.set(`${toolKey}.${name}`, value); return true; } catch (_) {}
+    }
+    if (ctx.storage && typeof ctx.storage.set === 'function') {
+      try { await ctx.storage.set(`${toolKey}.${name}`, value); return true; } catch (_) {}
+    }
+  } catch (_) {}
+  return false;
+}
+
 function assertAllowed(config, operation) {
   const allowed = config?.allowedOperations ?? [];
   if (!allowed.includes(operation)) {
@@ -48,8 +86,17 @@ async function ensureClient(context = {}) {
   } catch (_) {}
 
   const cfg = readNyteShiftToolConfig();
-  const key = cfg.apiKey ?? cfg.key ?? process.env.TRELLO_API_KEY;
-  const token = cfg.token ?? process.env.TRELLO_TOKEN;
+  const tk = 'nyteshift/trello';
+  let runtimeKey;
+  let runtimeToken;
+  try {
+    runtimeKey = await getToolSecret(ctx, tk, 'apiKey') ?? await getToolSecret(ctx, tk, 'key') ?? await getToolSecret(ctx, tk, 'trelloApiKey');
+    runtimeToken = await getToolSecret(ctx, tk, 'token') ?? await getToolSecret(ctx, tk, 'trelloToken') ?? await getToolSecret(ctx, tk, 'trello.token');
+  } catch (_) {}
+
+  const key = runtimeKey ?? cfg.apiKey ?? cfg.key ?? process.env.TRELLO_API_KEY;
+  let token = (runtimeToken ?? cfg.token ?? process.env.TRELLO_TOKEN);
+  if (typeof token === 'string') token = token.replace(/\s+/g, '');
   if (key && token) return new RestTrelloClient(key, token, cfg.baseUrl);
 
   // try reading a global block if provided by host
@@ -248,6 +295,14 @@ const toolImpl = {
     if (cfg.token && typeof cfg.token === 'string') cfg.token = cfg.token.replace(/\s+/g, '');
     cfg.defaultBoard = cfg.defaultBoard ?? '';
     cfg.defaultList = cfg.defaultList ?? '';
+
+    // Prefer runtime-provided secrets when available
+    try {
+      const runtimeKey = await getToolSecret(ctx, toolKey, 'apiKey') ?? await getToolSecret(ctx, toolKey, 'key') ?? await getToolSecret(ctx, toolKey, 'trelloApiKey');
+      if (typeof runtimeKey === 'string' && runtimeKey.trim() !== '') cfg.apiKey = runtimeKey;
+      const runtimeToken = await getToolSecret(ctx, toolKey, 'token') ?? await getToolSecret(ctx, toolKey, 'trelloToken') ?? await getToolSecret(ctx, toolKey, 'trello.token');
+      if (typeof runtimeToken === 'string' && runtimeToken.trim() !== '') cfg.token = String(runtimeToken).replace(/\s+/g, '');
+    } catch (_) {}
 
     try {
       if (typeof process !== 'undefined' && process.env && process.env.NYTESHIFT_DEBUG_PROVIDER_RAW === '1') {

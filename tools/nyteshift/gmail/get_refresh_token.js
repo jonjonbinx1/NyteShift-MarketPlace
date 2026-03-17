@@ -95,8 +95,8 @@ function openBrowser(url) {
 
 async function main() {
   const nyteCfg = loadNyteShiftConfig();
-  const presetClientId = getArg('clientId') ?? nyteCfg.clientId ?? null;
-  const presetClientSecret = getArg('clientSecret') ?? nyteCfg.clientSecret ?? null;
+  const presetClientId = getArg('clientId') ?? process.env.NYTESHIFT_GMAIL_CLIENT_ID ?? nyteCfg.clientId ?? null;
+  const presetClientSecret = getArg('clientSecret') ?? process.env.NYTESHIFT_GMAIL_CLIENT_SECRET ?? nyteCfg.clientSecret ?? null;
   const existingCode = getArg('code');
   const portInput = getArg('port');
   const port = parseInt(portInput ?? '3000', 10);
