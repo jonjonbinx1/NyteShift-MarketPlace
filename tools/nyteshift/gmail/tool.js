@@ -302,16 +302,23 @@ const toolImpl = {
   // â”€â”€ run â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   run: async ({ input, context }) => {
-    // prefer runtime-provided config (context.config). Secrets are expected to
-    // be provided at runtime (e.g. a NyteShift secrets file injected into
-    // `context.config`). For backwards compatibility we still read the
-    // on-disk config for non-secret defaults, but runtime secrets take
-    // precedence and will not be sourced from disk.
-    const uiCfg = context?.config ?? {};
+    // Prefer runtime-provided config (secrets are typically injected at
+    // runtime). Accept secrets from several possible injection points:
+    // - context.toolConfig['nyteshift/gmail']
+    // - context.config.toolConfig['nyteshift/gmail']
+    // - top-level context.config or context.toolConfig
+    // Fall back to on-disk config for non-secret defaults.
+    const ctx = context ?? {};
+    const toolKey = 'nyteshift/gmail';
+    const candidates = [];
+    if (ctx.toolConfig && ctx.toolConfig[toolKey]) candidates.push(ctx.toolConfig[toolKey]);
+    if (ctx.config && ctx.config.toolConfig && ctx.config.toolConfig[toolKey]) candidates.push(ctx.config.toolConfig[toolKey]);
+    if (ctx.config && typeof ctx.config === 'object') candidates.push(ctx.config);
+    if (ctx.toolConfig && typeof ctx.toolConfig === 'object') candidates.push(ctx.toolConfig);
+    const uiCfg = Object.assign({}, ...candidates);
     const fileCfg = readNyteShiftToolConfig();
 
-    // Merge file config with UI/runtime config, but prefer runtime-provided
-    // secret fields when present.
+    // Merge file config with runtime config; runtime secret fields override file values.
     const cfg = { ...fileCfg, ...uiCfg };
     if (typeof uiCfg.email === 'string' && uiCfg.email.trim() !== '') cfg.email = uiCfg.email;
     if (typeof uiCfg.appPassword === 'string' && uiCfg.appPassword.trim() !== '') cfg.appPassword = uiCfg.appPassword;
