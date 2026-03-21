@@ -46,11 +46,12 @@ export default {
   run: async ({ input, context }) => {
     const { action } = input;
 
-    switch (action) {
-      case "read": {
-        const content = await readFile(resolve(input.path), "utf-8");
-        return { ok: true, content };
-      }
+    try {
+      switch (action) {
+        case "read": {
+          const content = await readFile(resolve(input.path), "utf-8");
+          return { ok: true, content };
+        }
 
       case "write": {
         await writeFile(resolve(input.path), input.content, "utf-8");
@@ -92,11 +93,17 @@ export default {
         };
       }
 
-      default:
-        return {
-          ok: false,
-          error: `Unknown action "${action}". Supported: read, write, delete, list, mkdir, stat.`,
-        };
+        default:
+          return {
+            ok: false,
+            error: `Unknown action "${action}". Supported: read, write, delete, list, mkdir, stat.`,
+          };
+      }
+    } catch (err) {
+      return {
+        ok: false,
+        error: err && err.message ? err.message : String(err),
+      };
     }
   },
 };
