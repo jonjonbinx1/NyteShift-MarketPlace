@@ -316,8 +316,21 @@ const toolImpl = {
           if (!adapter || typeof adapter.acquireTokenByDeviceCode !== 'function') throw new Error('Adapter does not support device code flow');
           const scopes = input.scope ?? ['https://graph.microsoft.com/.default'];
           let deviceMessage = null;
-        refreshToken: uiCfg.googleRefreshToken ?? fileCfg.googleRefreshToken ?? fileCfg.refreshToken,
-        accessToken: uiCfg.googleAccessToken ?? fileCfg.googleAccessToken,
+          const cb = (resp) => {
+            deviceMessage = resp?.message ?? String(resp);
+            if (resp?.verification_uri_complete) openUrl(resp.verification_uri_complete);
+            else if (resp?.verification_uri) openUrl(resp.verification_uri);
+            if (typeof context?.sendLog === 'function') context.sendLog(deviceMessage); else console.log('[calendar deviceCode]', deviceMessage);
+          };
+          const result = await adapter.acquireTokenByDeviceCode(scopes, cb);
+          try {
+            const toolKey = 'nyteshift/calendar';
+            const saved = await setToolSecret(context, toolKey, 'microsoftRefreshToken', result?.refreshToken ?? result?.refresh_token).catch(() => false);
+            try { await setToolSecret(context, toolKey, 'microsoftAccessToken', result?.accessToken ?? result?.access_token).catch(() => false); } catch (_) {}
+            if (!saved) {
+              await writeNyteShiftToolConfig({ microsoftAccessToken: result?.accessToken ?? result?.access_token, microsoftRefreshToken: result?.refreshToken ?? result?.refresh_token });
+            }
+          } catch (_) {}
           return { ok: true, result, deviceMessage };
         }
 
@@ -325,9 +338,6 @@ const toolImpl = {
           assertAllowed(cfg, 'auth');
           const provider = input.provider ?? cfg.defaultProvider;
           if (!provider) throw new Error('provider is required');
-        refreshToken: uiCfg.microsoftRefreshToken ?? fileCfg.microsoftRefreshToken,
-        accessToken: uiCfg.microsoftAccessToken ?? fileCfg.microsoftAccessToken,
-
 
       // Prefer runtime secrets via NyteShift secret API (context.getSecret / context.storage etc.)
       try {
@@ -335,21 +345,23 @@ const toolImpl = {
         const runtimeGoogleRefresh = await getToolSecret(ctx, toolKey, 'googleRefreshToken')
           ?? await getToolSecret(ctx, toolKey, 'google.refreshToken')
           ?? await getToolSecret(ctx, toolKey, 'refreshToken');
-        if (runtimeGoogleRefresh) googleCfg.refreshToken = runtimeGoogleRefresh;
+        if (runtimeGoogleRefresh) uiCfg.googleRefreshToken = runtimeGoogleRefresh;
 
         const runtimeGoogleAccess = await getToolSecret(ctx, toolKey, 'googleAccessToken')
           ?? await getToolSecret(ctx, toolKey, 'google.accessToken')
           ?? await getToolSecret(ctx, toolKey, 'accessToken');
-        if (runtimeGoogleAccess) googleCfg.accessToken = runtimeGoogleAccess;
+        if (runtimeGoogleAccess) uiCfg.googleAccessToken = runtimeGoogleAccess;
 
         const runtimeMsRefresh = await getToolSecret(ctx, toolKey, 'microsoftRefreshToken')
           ?? await getToolSecret(ctx, toolKey, 'microsoft.refreshToken');
-        if (runtimeMsRefresh) msCfg.refreshToken = runtimeMsRefresh;
+        if (runtimeMsRefresh) uiCfg.microsoftRefreshToken = runtimeMsRefresh;
 
         const runtimeMsAccess = await getToolSecret(ctx, toolKey, 'microsoftAccessToken')
           ?? await getToolSecret(ctx, toolKey, 'microsoft.accessToken');
-        if (runtimeMsAccess) msCfg.accessToken = runtimeMsAccess;
+        if (runtimeMsAccess) uiCfg.microsoftAccessToken = runtimeMsAccess;
       } catch (_) {}
+      const client = await ensureClient(context, uiCfg, fileCfg);
+      const adapter = client.getAdapter(provider);
           if (provider === 'google') {
             const codeVerifier = generateCodeVerifier();
             const codeChallenge = sha256ToBase64url(codeVerifier);
