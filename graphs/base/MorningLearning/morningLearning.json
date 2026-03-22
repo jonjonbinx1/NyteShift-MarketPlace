@@ -1,0 +1,249 @@
+{
+  "name": "Morning Learning",
+  "description": "",
+  "version": "1.0.0",
+  "nodes": [
+    {
+      "id": "input-1",
+      "name": "Input",
+      "type": "input",
+      "position": {
+        "x": -853.5240571811729,
+        "y": -17.49675805489065
+      },
+      "model": "gpt-4o"
+    },
+    {
+      "id": "output-1",
+      "name": "Output",
+      "type": "output",
+      "position": {
+        "x": 617.0349094703986,
+        "y": -137.28067181009368
+      },
+      "model": "gpt-4o"
+    },
+    {
+      "id": "tool-mn0v7dgr",
+      "name": "Read learned topics",
+      "type": "tool",
+      "position": {
+        "x": -282.42100612888464,
+        "y": -11.847465279393942
+      },
+      "model": "gpt-4o",
+      "toolName": "base/filesystem",
+      "toolInput": {
+        "action": "read",
+        "path": "{{nyte.output.stdout}}/moring-learning-topics.txt"
+      },
+      "outputKey": "read-file"
+    },
+    {
+      "id": "catch-mn0v93p2",
+      "name": "File Not Found",
+      "type": "catch",
+      "position": {
+        "x": -747.4822812299736,
+        "y": -260.3569130277243
+      },
+      "catchTriggers": [
+        "maxIterations",
+        "error"
+      ],
+      "model": "gpt-4o",
+      "catchOrder": 1,
+      "resumePolicy": "ifHandled",
+      "handledWhen": {
+        "ref": "{{read-file.output.ok}}",
+        "operator": "eq",
+        "value": false
+      },
+      "resumeTarget": "tool-mn0vayur"
+    },
+    {
+      "id": "tool-mn0vayur",
+      "name": "Make File",
+      "type": "tool",
+      "position": {
+        "x": -581.0888961489298,
+        "y": -130.96198953947817
+      },
+      "model": "gpt-4o",
+      "toolName": "base/filesystem",
+      "toolInput": {
+        "action": "write",
+        "path": "{{nyte.output.stdout}}/moring-learning-topics.txt",
+        "content": " "
+      }
+    },
+    {
+      "id": "llm-mn16a94w",
+      "name": "Topic Chooser",
+      "type": "llm",
+      "position": {
+        "x": -272.4839259576628,
+        "y": -120.13247220634005
+      },
+      "promptTemplate": "suggest an interesting topic to begin the users day with. The topics do not need to be related to any of the previous topics. Do not suggest topics which have been suggested previously\n\n<previous topics>\n{{read-file.output}}\n</previous topics>",
+      "temperature": 0.15,
+      "model": "nvidia/nemotron-nano-9b-v2:free",
+      "provider": "openrouter",
+      "systemPrompt": "You are a research agent. Your task is to suggest a single topic for a user to begin their day with. The topic suggested will be used to find wikipedia articles that will be the basis of further research.\n\n<limitations>\nDo not suggest topics which have previously been suggested\n</limitations>\n\n<output>\noutput must be in the following json format {\"topic\" : $topic}\ndo not output anything besides this json\n</output>",
+      "maxTokens": 500,
+      "outputKey": "topic"
+    },
+    {
+      "id": "tool-mn16nfuy",
+      "name": "Wiki Search",
+      "type": "tool",
+      "position": {
+        "x": 76.84118540634849,
+        "y": -153.896237616988
+      },
+      "model": "gpt-4o",
+      "toolName": "base/wiki-search",
+      "toolInput": {
+        "query": "{{topic.output.topic}}"
+      },
+      "outputKey": "wiki"
+    },
+    {
+      "id": "llm-mn16phiu",
+      "name": "Summarize",
+      "type": "llm",
+      "position": {
+        "x": -14.061259930011289,
+        "y": 57.776599380535586
+      },
+      "promptTemplate": "Provide a distilled version of the information provided in the search section\n\nensure the summary gives enough information that a user with only surface level exposure to the topic could understand the topic after reading the summary. strive to keep the summary to 3 paragraphs maximum\n\n<search>\n{{wiki.output}}\n</search>",
+      "temperature": 0.3,
+      "model": "nvidia/nemotron-3-super-120b-a12b:free",
+      "provider": "openrouter",
+      "systemPrompt": "You are a research analyst tasked with providing a concise summary to the user",
+      "outputKey": "summary"
+    },
+    {
+      "id": "tool-mn16po2o",
+      "name": "write topic",
+      "type": "tool",
+      "position": {
+        "x": -198.46336332662696,
+        "y": -318.8192455843836
+      },
+      "model": "gpt-4o",
+      "toolName": "base/filesystem",
+      "toolInput": {
+        "action": "write",
+        "path": "{{nyte.output.stdout}}/moring-learning-topics.txt",
+        "content": ", {{topic.output}}"
+      }
+    },
+    {
+      "id": "tool-mn175oiq",
+      "name": "Find NyteShift",
+      "type": "tool",
+      "position": {
+        "x": -572.4619955676503,
+        "y": -8.45232507881228
+      },
+      "model": "gpt-4o",
+      "toolName": "base/shell",
+      "toolInput": {
+        "command": "node -e \"const os=require('os'),path=require('path'),fs=require('fs'); const p=path.join(os.homedir(),'.nyteshift'); if(fs.existsSync(p) && fs.statSync(p).isDirectory()) process.stdout.write(p)\""
+      },
+      "outputKey": "nyte"
+    },
+    {
+      "id": "tool-mn17bwg5",
+      "name": "Discord Header",
+      "type": "tool",
+      "position": {
+        "x": 244.36140609764016,
+        "y": 152.5748638027394
+      },
+      "model": "gpt-4o",
+      "toolName": "nyteshift/discord",
+      "toolInput": {
+        "action": "sendMessage",
+        "content": "---- Morning Report ----",
+        "channel": "general"
+      }
+    },
+    {
+      "id": "tool-mn17jb97",
+      "name": "Discord (copy)",
+      "type": "tool",
+      "position": {
+        "x": 341.88893691893605,
+        "y": -161.5558221134799
+      },
+      "model": "gpt-4o",
+      "toolName": "nyteshift/discord",
+      "toolInput": {
+        "action": "sendMessage",
+        "content": " {{summary.output}}",
+        "channel": "general"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-mn0vb3fb",
+      "source": "catch-mn0v93p2",
+      "target": "tool-mn0vayur"
+    },
+    {
+      "id": "edge-mn0vb73k",
+      "source": "tool-mn0vayur",
+      "target": "tool-mn0v7dgr"
+    },
+    {
+      "id": "edge-mn16ax6h",
+      "source": "tool-mn0v7dgr",
+      "target": "llm-mn16a94w"
+    },
+    {
+      "id": "edge-mn16njex",
+      "source": "llm-mn16a94w",
+      "target": "tool-mn16nfuy"
+    },
+    {
+      "id": "edge-mn16pjus",
+      "source": "tool-mn16nfuy",
+      "target": "llm-mn16phiu"
+    },
+    {
+      "id": "edge-mn16ppde",
+      "source": "llm-mn16a94w",
+      "target": "tool-mn16po2o"
+    },
+    {
+      "id": "edge-mn176bza",
+      "source": "input-1",
+      "target": "tool-mn175oiq"
+    },
+    {
+      "id": "edge-mn178aj5",
+      "source": "tool-mn175oiq",
+      "target": "tool-mn0v7dgr"
+    },
+    {
+      "id": "edge-mn17cdbs",
+      "source": "llm-mn16phiu",
+      "target": "tool-mn17bwg5"
+    },
+    {
+      "id": "edge-mn17jl5r",
+      "source": "tool-mn17bwg5",
+      "target": "tool-mn17jb97"
+    },
+    {
+      "id": "edge-mn17jn5a",
+      "source": "tool-mn17jb97",
+      "target": "output-1"
+    }
+  ],
+  "createdAt": 1774129662561,
+  "updatedAt": 1774150912685
+}

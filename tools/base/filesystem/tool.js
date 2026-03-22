@@ -1,6 +1,12 @@
 import { readFile, writeFile, unlink, readdir, mkdir, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
+// Debug helper: log module load location and cwd to help identify which copy
+try {
+  const modUrl = typeof import.meta !== 'undefined' ? import.meta.url : null;
+  console.debug('[filesystem] module loaded', { module: modUrl, cwd: process.cwd() });
+} catch (_) {}
+
 export default {
   name: "filesystem",
   version: "1.1.0",
