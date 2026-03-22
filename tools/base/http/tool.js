@@ -52,6 +52,7 @@ export default {
   run: async ({ input, context }) => {
     const { action } = input;
 
+    try {
     switch (action) {
       case "get": {
         const response = await fetch(input.url, {
@@ -100,6 +101,9 @@ export default {
           ok: false,
           error: `Unknown action "${action}". Supported: get, post, download.`,
         };
+    }
+    } catch (err) {
+      return { ok: false, error: err?.message ?? String(err) };
     }
   },
 };

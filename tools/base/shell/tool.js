@@ -67,6 +67,7 @@ export default {
       return { ok: false, error: "A non-empty command string is required." };
     }
 
+    try {
     // --- parse textarea configs (newline-separated strings → string[]) ---
     const parseLines = (raw) =>
       (typeof raw === "string" ? raw : "")
@@ -127,6 +128,9 @@ export default {
         });
       });
     });
+    } catch (err) {
+      return { ok: false, error: err?.message ?? String(err) };
+    }
   },
 };
 

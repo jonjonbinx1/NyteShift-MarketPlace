@@ -91,6 +91,7 @@ export default {
   ],
 
   run: async ({ input, context }) => {
+    try {
     const dir = resolve(input.path || ".");
 
     const entries = await readdir(dir).catch(() => []);
@@ -165,6 +166,9 @@ export default {
     }
 
     return { ok: true, path: dir, ...detected };
+    } catch (err) {
+      return { ok: false, error: err?.message ?? String(err) };
+    }
   },
 };
 

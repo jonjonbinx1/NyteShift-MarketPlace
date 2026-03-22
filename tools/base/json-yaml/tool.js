@@ -106,6 +106,7 @@ export default {
   run: async ({ input, context }) => {
     const { action } = input;
 
+    try {
     switch (action) {
       // ---------- JSON ----------
       case "json-parse": {
@@ -166,6 +167,9 @@ export default {
           ok: false,
           error: `Unknown action "${action}". Supported: json-parse, json-stringify, json-read, json-write, yaml-parse, yaml-stringify, yaml-read, yaml-write.`,
         };
+    }
+    } catch (err) {
+      return { ok: false, error: err?.message ?? String(err) };
     }
   },
 };

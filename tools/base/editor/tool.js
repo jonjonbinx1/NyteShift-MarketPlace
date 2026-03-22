@@ -36,6 +36,7 @@ export default {
   run: async ({ input, context }) => {
     const { action } = input;
 
+    try {
     switch (action) {
       case "replace": {
         const filePath = resolve(input.path);
@@ -92,6 +93,9 @@ export default {
           ok: false,
           error: `Unknown action "${action}". Supported: replace, replace-all, insert-at-line, delete-lines.`,
         };
+    }
+    } catch (err) {
+      return { ok: false, error: err?.message ?? String(err) };
     }
   },
 };

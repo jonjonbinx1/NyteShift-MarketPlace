@@ -62,6 +62,7 @@ export default {
       return { ok: false, error: "A non-empty code string is required." };
     }
 
+    try {
     const id = randomUUID().slice(0, 8);
     let tmpFile;
     let cmd;
@@ -105,6 +106,9 @@ export default {
         });
       });
     });
+    } catch (err) {
+      return { ok: false, error: err?.message ?? String(err) };
+    }
   },
 };
 
