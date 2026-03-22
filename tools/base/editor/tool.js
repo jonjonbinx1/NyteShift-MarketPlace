@@ -34,9 +34,9 @@ export default {
   ],
 
   run: async ({ input, context }) => {
+    try {
     const { action } = input;
 
-    try {
     switch (action) {
       case "replace": {
         const filePath = resolve(input.path);

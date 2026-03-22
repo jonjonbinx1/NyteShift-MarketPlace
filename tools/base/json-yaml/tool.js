@@ -104,9 +104,9 @@ export default {
   ],
 
   run: async ({ input, context }) => {
+    try {
     const { action } = input;
 
-    try {
     switch (action) {
       // ---------- JSON ----------
       case "json-parse": {

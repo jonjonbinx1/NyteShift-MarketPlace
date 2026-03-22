@@ -56,6 +56,7 @@ export default {
   ],
 
   run: async ({ input, context }) => {
+    try {
     const cfg = context?.config ?? {};
     const {
       command,
@@ -67,7 +68,6 @@ export default {
       return { ok: false, error: "A non-empty command string is required." };
     }
 
-    try {
     // --- parse textarea configs (newline-separated strings → string[]) ---
     const parseLines = (raw) =>
       (typeof raw === "string" ? raw : "")

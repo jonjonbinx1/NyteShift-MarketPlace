@@ -56,13 +56,13 @@ export default {
   ],
 
   run: async ({ input, context }) => {
+    try {
     const { language, code, timeout = 30_000 } = input;
 
     if (!code || typeof code !== "string") {
       return { ok: false, error: "A non-empty code string is required." };
     }
 
-    try {
     const id = randomUUID().slice(0, 8);
     let tmpFile;
     let cmd;

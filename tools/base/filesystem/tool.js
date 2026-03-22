@@ -44,9 +44,9 @@ export default {
   ],
 
   run: async ({ input, context }) => {
+    try {
     const { action } = input;
 
-    try {
       switch (action) {
         case "read": {
           const content = await readFile(resolve(input.path), "utf-8");
